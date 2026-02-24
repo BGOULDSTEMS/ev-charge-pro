@@ -43,17 +43,18 @@ if "providers" not in st.session_state:
 @st.cache_data(ttl=3600)
 def get_fx_rates():
     url = "https://api.exchangerate.host/latest?base=EUR"
-    r = requests.get(url)
-    return r.json()["rates"]
-
-rates = get_fx_rates()
-
-def convert(amount, from_curr, to_curr):
-    if from_curr == to_curr:
-        return amount
-    eur_value = amount / rates[from_curr] if from_curr != "EUR" else amount
-    return eur_value * rates[to_curr]
-
+    try:
+        r = requests.get(url, timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        if "rates" in data:
+            return data["rates"]
+        else:
+            st.warning("Exchange rate API returned unexpected data. Using fallback rates.")
+            return {"USD": 1.1, "GBP": 0.88, "EUR": 1.0}  # fallback
+    except Exception as e:
+        st.warning(f"Exchange rate API error: {e}. Using fallback rates.")
+        return {"USD": 1.1, "GBP": 0.88, "EUR": 1.0}  # fallback
 # ---------------------------------------------------
 # CHARGING MODEL
 # ---------------------------------------------------
