@@ -55,6 +55,16 @@ def get_fx_rates():
     except Exception as e:
         st.warning(f"Exchange rate API error: {e}. Using fallback rates.")
         return {"USD": 1.1, "GBP": 0.88, "EUR": 1.0}  # fallback
+
+rates = get_fx_rates()
+
+def convert(amount, from_curr, to_curr):
+    """Convert amount from one currency to another using rates."""
+    if from_curr == to_curr:
+        return amount
+    # Convert to EUR first if necessary
+    eur_value = amount / rates[from_curr] if from_curr != "EUR" else amount
+    return eur_value * rates[to_curr]
 # ---------------------------------------------------
 # CHARGING MODEL
 # ---------------------------------------------------
