@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+
+st.title("🔋 EV Charging Cost & Time Calculator")
 
 # ---------------------------------------------------
 # PROVIDERS & CHARGER DATA
 # ---------------------------------------------------
-# Example provider data: allowed charger powers and rates
 providers = {
     "Freshmile": {
         "75": {"cost_kwh": 0.30, "cost_min": 0.30},
@@ -14,38 +14,24 @@ providers = {
     "Electroverse": {
         "75": {"cost_kwh": 0.80, "cost_min": 0.0},
     },
+    # Add more providers here
 }
 
 # ---------------------------------------------------
 # USER INPUT
 # ---------------------------------------------------
-st.title("🔋 EV Charging Cost & Time Calculator")
+st.sidebar.header("Battery & Charge Info")
+battery_size = st.sidebar.number_input("Battery size (kWh)", value=81.1, step=1.0)
+start_soc = st.sidebar.slider("Current charge (%)", 0, 100, 80)
+target_soc = st.sidebar.slider("Target charge (%)", start_soc + 1, 100, 100)
+efficiency = st.sidebar.slider("Charging efficiency (%)", 80, 100, 90) / 100
 
-provider = st.selectbox("Select your charging card/provider", list(providers.keys()))
-
-# Allowed charger powers for selected provider
-allowed_powers = sorted([int(p) for p in providers[provider].keys()])
-
-charger_power = st.slider(
-    "Select charger power (kW) available for this provider",
-    min_value=min(allowed_powers),
-    max_value=max(allowed_powers),
-    value=min(allowed_powers),
-    step=1
-)
-
-# Battery info
-battery_size = st.number_input("Battery size (kWh)", value=81.1, step=1.0)
-start_soc = st.slider("Current charge (%)", 0, 100, 80)
-target_soc = st.slider("Target charge (%)", start_soc + 1, 100, 100)
-
-# Efficiency
-efficiency = st.slider("Charging efficiency (%)", 80, 100, 90)/100
+st.sidebar.header("Select providers to compare")
+selected_providers = st.sidebar.multiselect("Providers", list(providers.keys()), default=list(providers.keys()))
 
 # ---------------------------------------------------
 # HELPER FUNCTIONS
 # ---------------------------------------------------
-
 def taper_factor(soc):
     """Return fraction of charger power based on SOC"""
     if soc < 60:
@@ -56,20 +42,15 @@ def taper_factor(soc):
         return 0.4
 
 def calculate_cost_time(charger_kw, energy_needed, start_soc, target_soc, provider):
-    """Return estimated time (minutes) and total cost"""
     avg_soc = (start_soc + target_soc) / 2
     effective_power = charger_kw * taper_factor(avg_soc)
     charging_time_hours = energy_needed / effective_power
     charging_time_minutes = charging_time_hours * 60
 
-    # Account for efficiency
     energy_from_grid = energy_needed / efficiency
-
-    # Costs
     cost_kwh = providers[provider][str(charger_kw)]["cost_kwh"]
     cost_min = providers[provider][str(charger_kw)]["cost_min"]
     total_cost = energy_from_grid * cost_kwh + charging_time_minutes * cost_min
-
     return charging_time_minutes, total_cost
 
 # ---------------------------------------------------
@@ -78,36 +59,45 @@ def calculate_cost_time(charger_kw, energy_needed, start_soc, target_soc, provid
 energy_needed = battery_size * (target_soc - start_soc) / 100
 
 # ---------------------------------------------------
-# CALCULATE SELECTED CHARGER
+# PROVIDER INPUTS & CALCULATION
 # ---------------------------------------------------
-time_selected, cost_selected = calculate_cost_time(charger_power, energy_needed, start_soc, target_soc, provider)
+all_results = []
 
-st.write(f"### Charging Summary for {provider} at {charger_power} kW")
-st.write(f"Energy to add: {energy_needed:.1f} kWh")
-st.write(f"Estimated charging time: {time_selected:.1f} minutes")
-st.write(f"Estimated cost: {cost_selected:.2f} (currency)")
+for provider in selected_providers:
+    st.header(f"⚡ {provider}")
+    # Slider per provider for charger power
+    allowed_powers = sorted([int(p) for p in providers[provider].keys()])
+    charger_power = st.slider(
+        f"Select charger power (kW) for {provider}",
+        min_value=min(allowed_powers),
+        max_value=max(allowed_powers),
+        value=min(allowed_powers),
+        step=1,
+        key=f"{provider}_slider"
+    )
+    # Calculate time and cost
+    time_min, total_cost = calculate_cost_time(charger_power, energy_needed, start_soc, target_soc, provider)
+    st.write(f"Energy to add: {energy_needed:.1f} kWh")
+    st.write(f"Estimated charging time: {time_min:.1f} minutes")
+    st.write(f"Estimated cost: {total_cost:.2f} (currency)")
+
+    all_results.append({
+        "Provider": provider,
+        "Charger kW": charger_power,
+        "Time (min)": time_min,
+        "Cost": total_cost
+    })
 
 # ---------------------------------------------------
-# COMPARE ALL ALLOWED CHARGERS FOR THIS PROVIDER
+# SUMMARY COMPARISON
 # ---------------------------------------------------
-comparison = []
-for kw in allowed_powers:
-    t, c = calculate_cost_time(kw, energy_needed, start_soc, target_soc, provider)
-    comparison.append({"Charger kW": kw, "Time (min)": t, "Cost": c})
+if all_results:
+    df_comp = pd.DataFrame(all_results)
+    st.write("### Comparison Across Providers")
+    st.dataframe(df_comp)
 
-df_comp = pd.DataFrame(comparison)
+    st.write("### Cost vs Provider & Charger")
+    st.bar_chart(df_comp.set_index("Provider")["Cost"])
 
-st.write("### Comparison of all allowed chargers")
-st.dataframe(df_comp)
-
-# ---------------------------------------------------
-# BAR CHART OF COST VS CHARGER POWER
-# ---------------------------------------------------
-st.write("### Cost vs Charger Power")
-st.bar_chart(df_comp.set_index("Charger kW")["Cost"])
-
-# ---------------------------------------------------
-# CHEAPEST OPTION
-# ---------------------------------------------------
-best = df_comp.loc[df_comp["Cost"].idxmin()]
-st.success(f"💡 Cheapest option: {best['Charger kW']} kW → Cost: {best['Cost']:.2f}, Time: {best['Time (min)']:.1f} minutes")
+    best = df_comp.loc[df_comp["Cost"].idxmin()]
+    st.success(f"💡 Cheapest option: {best['Provider']} at {best['Charger kW']} kW → Cost: {best['Cost']:.2f}, Time: {best['Time (min)']:.1f} minutes")
