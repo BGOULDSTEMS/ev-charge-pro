@@ -14,20 +14,31 @@ providers = {
     "Electroverse": {
         "75": {"cost_kwh": 0.80, "cost_min": 0.0},
     },
-    # Add more providers here
+    # Add more providers as needed
 }
 
 # ---------------------------------------------------
 # USER INPUT
 # ---------------------------------------------------
-st.sidebar.header("Battery & Charge Info")
-battery_size = st.sidebar.number_input("Battery size (kWh)", value=81.1, step=1.0)
-start_soc = st.sidebar.slider("Current charge (%)", 0, 100, 80)
-target_soc = st.sidebar.slider("Target charge (%)", start_soc + 1, 100, 100)
-efficiency = st.sidebar.slider("Charging efficiency (%)", 80, 100, 90) / 100
+provider = st.selectbox("Select your charging card/provider", list(providers.keys()))
 
-st.sidebar.header("Select providers to compare")
-selected_providers = st.sidebar.multiselect("Providers", list(providers.keys()), default=list(providers.keys()))
+# Battery info
+battery_size = st.number_input("Battery size (kWh)", value=81.1, step=1.0)
+start_soc = st.slider("Current charge (%)", 0, 100, 80)
+target_soc = st.slider("Target charge (%)", start_soc + 1, 100, 100)
+efficiency = st.slider("Charging efficiency (%)", 80, 100, 90)/100
+
+# Allowed charger powers for this provider
+allowed_powers = sorted([int(p) for p in providers[provider].keys()])
+
+# Charger power slider (for single selected charger)
+charger_power = st.slider(
+    "Select charger power (kW) for this provider",
+    min_value=min(allowed_powers),
+    max_value=max(allowed_powers),
+    value=min(allowed_powers),
+    step=1
+)
 
 # ---------------------------------------------------
 # HELPER FUNCTIONS
@@ -59,45 +70,36 @@ def calculate_cost_time(charger_kw, energy_needed, start_soc, target_soc, provid
 energy_needed = battery_size * (target_soc - start_soc) / 100
 
 # ---------------------------------------------------
-# PROVIDER INPUTS & CALCULATION
+# CALCULATE SELECTED CHARGER
 # ---------------------------------------------------
-all_results = []
+time_selected, cost_selected = calculate_cost_time(charger_power, energy_needed, start_soc, target_soc, provider)
 
-for provider in selected_providers:
-    st.header(f"⚡ {provider}")
-    # Slider per provider for charger power
-    allowed_powers = sorted([int(p) for p in providers[provider].keys()])
-    charger_power = st.slider(
-        f"Select charger power (kW) for {provider}",
-        min_value=min(allowed_powers),
-        max_value=max(allowed_powers),
-        value=min(allowed_powers),
-        step=1,
-        key=f"{provider}_slider"
-    )
-    # Calculate time and cost
-    time_min, total_cost = calculate_cost_time(charger_power, energy_needed, start_soc, target_soc, provider)
-    st.write(f"Energy to add: {energy_needed:.1f} kWh")
-    st.write(f"Estimated charging time: {time_min:.1f} minutes")
-    st.write(f"Estimated cost: {total_cost:.2f} (currency)")
-
-    all_results.append({
-        "Provider": provider,
-        "Charger kW": charger_power,
-        "Time (min)": time_min,
-        "Cost": total_cost
-    })
+st.write(f"### Charging Summary for {provider} at {charger_power} kW")
+st.write(f"Energy to add: {energy_needed:.1f} kWh")
+st.write(f"Estimated charging time: {time_selected:.1f} minutes")
+st.write(f"Estimated cost: {cost_selected:.2f} (currency)")
 
 # ---------------------------------------------------
-# SUMMARY COMPARISON
+# COMPARE ALL ALLOWED CHARGERS FOR THIS PROVIDER
 # ---------------------------------------------------
-if all_results:
-    df_comp = pd.DataFrame(all_results)
-    st.write("### Comparison Across Providers")
-    st.dataframe(df_comp)
+comparison = []
+for kw in allowed_powers:
+    t, c = calculate_cost_time(kw, energy_needed, start_soc, target_soc, provider)
+    comparison.append({"Charger kW": kw, "Time (min)": t, "Cost": c})
 
-    st.write("### Cost vs Provider & Charger")
-    st.bar_chart(df_comp.set_index("Provider")["Cost"])
+df_comp = pd.DataFrame(comparison)
 
-    best = df_comp.loc[df_comp["Cost"].idxmin()]
-    st.success(f"💡 Cheapest option: {best['Provider']} at {best['Charger kW']} kW → Cost: {best['Cost']:.2f}, Time: {best['Time (min)']:.1f} minutes")
+st.write("### Comparison of all allowed chargers")
+st.dataframe(df_comp)
+
+# ---------------------------------------------------
+# BAR CHART OF COST VS CHARGER POWER
+# ---------------------------------------------------
+st.write("### Cost vs Charger Power")
+st.bar_chart(df_comp.set_index("Charger kW")["Cost"])
+
+# ---------------------------------------------------
+# CHEAPEST OPTION
+# ---------------------------------------------------
+best = df_comp.loc[df_comp["Cost"].idxmin()]
+st.success(f"💡 Cheapest option: {best['Charger kW']} kW → Cost: {best['Cost']:.2f}, Time: {best['Time (min)']:.1f} minutes")
