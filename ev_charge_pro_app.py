@@ -12,8 +12,6 @@ from datetime import datetime
 
 import streamlit as st
 
-API_KEY = st.secrets["ROUTE_API_KEY"]
-
 # ============================================================================
 # CONFIGURATION & DATA
 # ============================================================================
