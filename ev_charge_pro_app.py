@@ -8,15 +8,14 @@ st.set_page_config(page_title="EV Charge Pro UK", page_icon="⚡", layout="wide"
 st.markdown(
     """
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap');
 
       :root{
-        --bg:#060a12;
-        --bg-2:#0a1220;
-        --card:rgba(11,18,33,.86);
-        --line:rgba(120,150,205,.30);
+        --bg:#050a14;
+        --bg-2:#0a1324;
+        --card:rgba(10,18,34,.88);
+        --line:rgba(139,173,240,.35);
         --text:#ffffff;
-        --text-soft:#e7eefc;
       }
 
       html, body, [data-testid="stAppViewContainer"] {
@@ -26,17 +25,17 @@ st.markdown(
 
       .stApp{
         background:
-          radial-gradient(1200px 420px at 10% -15%, rgba(0,173,239,.18), transparent 58%),
-          radial-gradient(1000px 380px at 95% -20%, rgba(0,120,255,.14), transparent 60%),
+          radial-gradient(1200px 460px at 10% -20%, rgba(0,173,239,.20), transparent 58%),
+          radial-gradient(900px 360px at 95% -25%, rgba(33,130,255,.18), transparent 60%),
           linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
         color: var(--text);
-        font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       .block-container{max-width:1280px;padding-top:.55rem;padding-bottom:1.8rem;}
-      h1,h2,h3,h4{color:var(--text);letter-spacing:-.01em;font-family:"IBM Plex Sans",sans-serif;font-weight:600;}
+      h1,h2,h3,h4,p,span,small,strong,div,label{color:#fff !important;}
+      h1,h2,h3,h4{letter-spacing:-.01em;font-weight:700;}
 
-      /* iOS scroll friendliness around sliders */
       div[data-testid="stSlider"], div[data-testid="stSlider"] * {
         touch-action: pan-y !important;
       }
@@ -63,7 +62,6 @@ st.markdown(
       }
 
       .hero-content{padding:1.2rem 1.15rem;max-width:760px;}
-      .hero p{margin:.3rem 0 0;color:var(--text-soft);}
 
       .panel{
         background:var(--card);
@@ -74,16 +72,19 @@ st.markdown(
         backdrop-filter:blur(8px);
       }
 
-      .small-note{color:var(--text-soft);font-size:.9rem;}
+      .small-note{color:#fff !important;font-size:.9rem;}
       div[data-testid="stMetric"]{
-        background: rgba(7,13,24,.90);
+        background: rgba(7,13,24,.94);
         border:1px solid var(--line);
         border-radius:12px;
         padding:.75rem .88rem;
       }
-      div[data-testid="stMetricLabel"]{color:var(--text-soft);}
+      div[data-testid="stMetricLabel"]{color:#fff !important;}
       .stButton > button{min-height:46px;font-weight:700;border-radius:10px;}
-      label, .stSelectbox label, .stCheckbox label, .stNumberInput label { color: var(--text) !important; }
+
+      .stMarkdown, .stCaption, .stAlert, .st-emotion-cache-1wivap2, .st-emotion-cache-10trblm {
+        color:#fff !important;
+      }
 
       @media (max-width: 920px){
         .block-container{padding-left:.7rem;padding-right:.7rem;}
@@ -259,14 +260,14 @@ def provider_controls(label, key_prefix, car_max, ios_safe_mode):
         "session_fee": float(session_fee),
     }
 
-st.markdown('<div class="top-banner"><strong>EV Charge Pro UK</strong> <span style="color:#d7e5ff; margin-left:10px;">Corporate Cost Comparison</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="top-banner"><strong>EV Charge Pro UK</strong></div>', unsafe_allow_html=True)
 
 st.markdown(
     """
     <div class="hero">
       <div class="hero-content">
         <h2 style="margin:0;">Charge Cost Comparison</h2>
-        <p>Top banner controls, white text for readability, and iOS-safe input mode to avoid accidental slider changes while scrolling.</p>
+        <p>Professional font, fully white text, top banner controls, and iOS-safe input mode.</p>
       </div>
     </div>
     """,
@@ -276,9 +277,13 @@ st.markdown(
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 st.subheader("Vehicle & Session (Top Banner Controls)")
 
-mode_col1, mode_col2 = st.columns([1.5, 4])
+mode_col1, mode_col2 = st.columns([1.8, 4])
 with mode_col1:
-    ios_safe_mode = st.toggle("iOS Scroll Safe Inputs", value=True, help="Uses number inputs instead of sliders to prevent accidental value changes while scrolling on iPhone.")
+    ios_safe_mode = st.toggle(
+        "iOS Scroll Safe Inputs",
+        value=True,
+        help="Uses number inputs to reduce accidental slider changes while scrolling on iPhone."
+    )
 
 top1, top2, top3, top4 = st.columns([2.2, 1.1, 1.2, 1.2])
 
