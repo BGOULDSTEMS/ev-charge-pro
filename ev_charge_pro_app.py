@@ -18,27 +18,14 @@ from geopy.geocoders import Nominatim
 # ============================================================================
 
 class Config:
-    """Application configuration constants"""
     APP_TITLE = "EV Charge Pro UK"
     APP_ICON = "⚡"
     PAGE_LAYOUT = "wide"
-    CACHE_TTL = 1800  # 30 minutes
+    CACHE_TTL = 1800
     API_TIMEOUT = 8
     DEFAULT_MILES_PER_KWH = 3.5
-    DEFAULT_EFFICIENCY_LOSS = 6  # percentage
-    
-    # Color scheme
-    COLORS = {
-        'primary': '#00ADF0',
-        'secondary': '#2182FF',
-        'success': '#10B981',
-        'warning': '#F59E0B',
-        'danger': '#EF4444',
-        'background': '#050a14',
-        'card': 'rgba(10,18,34,.92)',
-    }
+    DEFAULT_EFFICIENCY_LOSS = 6  # percent
 
-# Vehicle database
 VEHICLE_DATABASE = pd.DataFrame([
     {"model": "Tesla Model Y Long Range", "battery_kwh": 75.0, "max_dc_kw": 250, "category": "Premium SUV"},
     {"model": "Tesla Model 3 Long Range", "battery_kwh": 75.0, "max_dc_kw": 250, "category": "Premium Sedan"},
@@ -63,23 +50,13 @@ VEHICLE_DATABASE = pd.DataFrame([
     {"model": "Custom Vehicle", "battery_kwh": 80.0, "max_dc_kw": 150, "category": "Custom"},
 ])
 
-# Charging providers database
 CHARGING_PROVIDERS = {
-    "MFG EV Power": {"energy": 0.79, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Rapid", "network": "Regional"},
-    "EVYVE Charging Stations": {"energy": 0.80, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Rapid", "network": "Regional"},
-    "Osprey Charging (App)": {"energy": 0.82, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Rapid", "network": "National"},
-    "Osprey Charging (Contactless)": {"energy": 0.87, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Rapid", "network": "National"},
-    "Electroverse": {"energy": 0.80, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Roaming", "network": "Multi-Network"},
-    "Zapmap Zap-Pay": {"energy": 0.80, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Roaming", "network": "Multi-Network"},
-    "Plugsurfing": {"energy": 0.80, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Roaming", "network": "Multi-Network"},
-    "BP Pulse PAYG": {"energy": 0.87, "time": 0.00, "currency": "GBP", "default_kw": 150, "type": "public", "category": "Rapid", "network": "National"},
-    "Pod Point": {"energy": 0.69, "time": 0.00, "currency": "GBP", "default_kw": 75, "type": "public", "category": "Fast", "network": "National"},
-    "IZIVIA Pass": {"energy": 0.75, "time": 0.00, "currency": "EUR", "default_kw": 150, "type": "public", "category": "Rapid", "network": "European"},
-    "Electra+": {"energy": 0.49, "time": 0.00, "currency": "EUR", "default_kw": 150, "type": "public", "category": "Rapid", "network": "European"},
-    "Freshmile": {"energy": 0.25, "time": 0.05, "currency": "EUR", "default_kw": 50, "type": "public", "category": "Fast", "network": "European"},
-    "Home - Octopus Intelligent": {"energy": 0.08, "time": 0.00, "currency": "GBP", "default_kw": 7, "type": "home", "category": "Home", "network": "Domestic"},
-    "Home - E.ON Drive": {"energy": 0.09, "time": 0.00, "currency": "GBP", "default_kw": 7, "type": "home", "category": "Home", "network": "Domestic"},
-    "Home - EDF Standard": {"energy": 0.10, "time": 0.00, "currency": "GBP", "default_kw": 7, "type": "home", "category": "Home", "network": "Domestic"},
+    "MFG EV Power": {"energy":0.79,"time":0.0,"currency":"GBP","default_kw":150,"type":"public","category":"Rapid","network":"Regional"},
+    "EVYVE Charging Stations": {"energy":0.80,"time":0.0,"currency":"GBP","default_kw":150,"type":"public","category":"Rapid","network":"Regional"},
+    "Osprey Charging (App)": {"energy":0.82,"time":0.0,"currency":"GBP","default_kw":150,"type":"public","category":"Rapid","network":"National"},
+    "Pod Point": {"energy":0.69,"time":0.0,"currency":"GBP","default_kw":75,"type":"public","category":"Fast","network":"National"},
+    "Home - Octopus Intelligent": {"energy":0.08,"time":0.0,"currency":"GBP","default_kw":7,"type":"home","category":"Home","network":"Domestic"},
+    "Home - EDF Standard": {"energy":0.10,"time":0.0,"currency":"GBP","default_kw":7,"type":"home","category":"Home","network":"Domestic"},
 }
 
 # ============================================================================
@@ -87,144 +64,120 @@ CHARGING_PROVIDERS = {
 # ============================================================================
 
 @st.cache_data(ttl=Config.CACHE_TTL)
-def fetch_exchange_rates() -> Dict[str, float]:
-    """Fetch live exchange rates with fallback"""
-    fallback_rates = {"EUR": 1.0, "GBP": 0.87, "USD": 1.10, "_date": "fallback", "_status": "Using fallback rates"}
+def fetch_exchange_rates() -> Dict[str,float]:
+    fallback = {"EUR":1.0,"GBP":0.87,"USD":1.10,"_date":"fallback","_status":"fallback"}
     try:
-        response = requests.get(
-            "https://api.frankfurter.app/latest?from=EUR&to=GBP,USD",
-            timeout=Config.API_TIMEOUT
-        )
-        response.raise_for_status()
-        data = response.json()
-        rates = data.get("rates", {})
-        return {"EUR": 1.0, "GBP": float(rates.get("GBP", fallback_rates["GBP"])), "USD": float(rates.get("USD", fallback_rates["USD"])), "_date": data.get("date","unknown"), "_status":"Live rates"}
-    except Exception:
-        st.warning("⚠️ Unable to fetch live exchange rates. Using fallback values.")
-        return fallback_rates
-
+        r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=GBP,USD", timeout=Config.API_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        rates = data.get("rates",{})
+        return {"EUR":1.0,"GBP":float(rates.get("GBP",0.87)),"USD":float(rates.get("USD",1.10)),"_date":data.get("date","unknown"),"_status":"live"}
+    except:
+        return fallback
 
 def convert_currency(amount: float, from_currency: str, to_currency: str, rates: Dict) -> float:
-    """Convert between currencies using rates"""
-    if from_currency == to_currency:
-        return amount
-    if from_currency not in rates or to_currency not in rates:
-        return amount
-    eur_amount = amount if from_currency == "EUR" else amount / rates[from_currency]
-    return eur_amount * rates[to_currency]
+    if from_currency==to_currency: return amount
+    eur_amt = amount if from_currency=="EUR" else amount / rates[from_currency]
+    return eur_amt * rates[to_currency]
 
-
-def calculate_charging_time(battery_kwh: float, effective_kw: float, start_pct: float, end_pct: float, apply_taper: bool=True) -> float:
-    """Calculate charging time (minutes) with tapering"""
-    if effective_kw <= 0 or end_pct <= start_pct:
-        return 0.0
-    total_minutes = 0.0
-    current_pct = float(start_pct)
-    while current_pct < end_pct:
+def calculate_charging_time(battery_kwh:float,effective_kw:float,start_pct:float,end_pct:float,apply_taper=True)->float:
+    if effective_kw<=0 or end_pct<=start_pct: return 0.0
+    total_min=0.0;current=start_pct
+    while current<end_pct:
         if apply_taper:
-            if current_pct < 80:
-                power_rate = effective_kw
-                next_milestone = min(end_pct, 80)
-            elif current_pct < 90:
-                power_rate = effective_kw * 0.5
-                next_milestone = min(end_pct, 90)
-            else:
-                power_rate = effective_kw * 0.3
-                next_milestone = end_pct
-        else:
-            power_rate = effective_kw
-            next_milestone = end_pct
-        pct_segment = (next_milestone - current_pct) / 100.0
-        energy_segment = battery_kwh * pct_segment
-        segment_minutes = (energy_segment / max(power_rate,0.1)) * 60.0
-        total_minutes += segment_minutes
-        current_pct = next_milestone
-    return total_minutes
+            if current<80: power=effective_kw; next_m=min(end_pct,80)
+            elif current<90: power=effective_kw*0.5; next_m=min(end_pct,90)
+            else: power=effective_kw*0.3; next_m=end_pct
+        else: power=effective_kw; next_m=end_pct
+        seg_energy=battery_kwh*((next_m-current)/100.0)
+        total_min += (seg_energy/max(power,0.1))*60.0
+        current=next_m
+    return total_min
 
+def calculate_charging_cost(energy_kwh:float,time_minutes:float,energy_price:float,time_price:float,session_fee:float)->float:
+    return energy_kwh*energy_price + time_minutes*time_price + session_fee
 
-def calculate_charging_cost(energy_kwh: float, time_minutes: float, energy_price: float, time_price: float, session_fee: float) -> float:
-    """Calculate total cost"""
-    return energy_kwh * energy_price + time_minutes * time_price + session_fee
+def format_time(minutes:float)->str:
+    if minutes<60: return f"{minutes:.0f} min"
+    h=int(minutes//60); m=int(minutes%60); return f"{h}h {m}m"
 
-
-def format_time(minutes: float) -> str:
-    if minutes < 60:
-        return f"{minutes:.0f} min"
-    hours = int(minutes // 60)
-    mins = int(minutes % 60)
-    return f"{hours}h {mins}m"
-
-
-def format_currency(amount: float, currency: str) -> str:
-    symbols = {"GBP": "£", "EUR": "€", "USD": "$"}
-    return f"{symbols.get(currency, currency)}{amount:.2f}"
-
+def format_currency(amount:float,currency:str)->str:
+    syms={"GBP":"£","EUR":"€","USD":"$"}; s=syms.get(currency,currency); return f"{s}{amount:.2f}"
 
 @st.cache_data(ttl=Config.CACHE_TTL)
-def geocode_postcode(postcode: str) -> Optional[Tuple[float, float]]:
-    geolocator = Nominatim(user_agent="ev_charge_pro_app")
+def geocode_postcode(postcode:str)->Optional[Tuple[float,float]]:
     try:
-        loc = geolocator.geocode(postcode)
-        if loc:
-            return (loc.latitude, loc.longitude)
+        geoloc=Nominatim(user_agent="ev_charge_pro_app").geocode(postcode)
+        if geoloc: return geoloc.latitude,geoloc.longitude
         return None
-    except Exception:
-        return None
-
+    except: return None
 
 # ============================================================================
-# STYLING
+# STREAMLIT APP
 # ============================================================================
 
-def apply_custom_styles():
-    st.markdown("""
-    <style>
-    /* CSS styles here (your full CSS unchanged) */
-    </style>
-    """, unsafe_allow_html=True)
+st.set_page_config(page_title=Config.APP_TITLE,page_icon=Config.APP_ICON,layout=Config.PAGE_LAYOUT)
 
+# Hero Section
+st.markdown(f"""
+<div style="text-align:center;padding:2rem;background:#0a0e1a;border-radius:12px;margin-bottom:1rem;">
+<h1 style="background:linear-gradient(135deg,#00ADF0 0%,#2182FF 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">{Config.APP_ICON} EV Charge Pro UK</h1>
+<p style="color:#a0aec0;font-size:1.2rem;">Professional EV charging cost comparison • Compare providers • Calculate savings</p>
+</div>
+""",unsafe_allow_html=True)
 
-# ============================================================================
-# UI COMPONENTS
-# ============================================================================
+# Postcode Input & Map
+st.markdown("### 🗺️ Your Charging Location")
+postcode = st.text_input("Enter your UK postcode",placeholder="e.g., SW1A 1AA")
+if postcode:
+    coords = geocode_postcode(postcode)
+    if coords:
+        lat,lon = coords
+        st.success(f"📍 Postcode located at: {lat:.5f}, {lon:.5f}")
+        m=folium.Map(location=[lat,lon],zoom_start=14)
+        folium.Marker([lat,lon],tooltip="Your location",icon=folium.Icon(color="blue")).add_to(m)
+        st_folium(m,width=700,height=500)
+    else: st.error("❌ Could not find that postcode.")
 
-def render_hero_section():
-    st.markdown(f"""
-    <div class="hero-section">
-        <div class="hero-title">{Config.APP_ICON} EV Charge Pro UK</div>
-        <div class="hero-subtitle">Professional EV charging cost comparison • Compare providers • Calculate savings</div>
-    </div>
-    """, unsafe_allow_html=True)
+# Vehicle Selection
+st.markdown("### 🚗 Vehicle Configuration")
+vehicle_name = st.selectbox("Select Your Vehicle",VEHICLE_DATABASE["model"].tolist(),index=7)
+vdata=VEHICLE_DATABASE[VEHICLE_DATABASE["model"]==vehicle_name].iloc[0]
+battery_kwh = st.number_input("Battery Capacity (kWh)",min_value=10.0,max_value=220.0,value=float(vdata["battery_kwh"]),step=0.1)
+car_max_kw = st.slider("Max DC Charging (kW)",min_value=20,max_value=400,value=int(vdata["max_dc_kw"]),step=5)
 
+# Charging Session Parameters
+st.markdown("### ⚡ Charging Session Parameters")
+start_pct = st.slider("Current State of Charge (%)",0,100,20)
+end_pct = st.slider("Target State of Charge (%)",0,100,80)
+efficiency_loss = st.slider("Charging Loss (%)",0,20,Config.DEFAULT_EFFICIENCY_LOSS)
+apply_taper = st.checkbox("Apply Charging Curve Taper",value=True)
+miles_per_kwh = st.number_input("Efficiency (mi/kWh)",min_value=1.0,max_value=7.0,value=Config.DEFAULT_MILES_PER_KWH,step=0.1)
 
-def render_location_input():
-    """Render postcode input and map"""
-    st.markdown("### 🗺️ Your Charging Location")
-    postcode = st.text_input("Enter your UK postcode", placeholder="e.g., SW1A 1AA")
-    if postcode:
-        coords = geocode_postcode(postcode)
-        if coords:
-            lat, lon = coords
-            st.success(f"📍 Postcode located at: {lat:.5f}, {lon:.5f}")
-            m = folium.Map(location=[lat, lon], zoom_start=14)
-            folium.Marker([lat, lon], tooltip="Your location", icon=folium.Icon(color="blue")).add_to(m)
-            st_folium(m, width=700, height=500)
-        else:
-            st.error("❌ Could not find that postcode. Please check your input.")
+# Provider Selection
+st.markdown("### 🔌 Provider Configuration")
+provider_list=list(CHARGING_PROVIDERS.keys())
+provider_a_name = st.selectbox("Provider A",provider_list,index=0)
+provider_b_name = st.selectbox("Provider B",provider_list,index=1)
+provider_a = CHARGING_PROVIDERS[provider_a_name]
+provider_b = CHARGING_PROVIDERS[provider_b_name]
 
+# Convert to effective charging kW
+effective_kw_a = min(car_max_kw,provider_a["default_kw"])
+effective_kw_b = min(car_max_kw,provider_b["default_kw"])
 
-# ============================================================================
-# MAIN
-# ============================================================================
+# Calculation
+energy_needed = battery_kwh*((end_pct-start_pct)/100.0)*(1+efficiency_loss/100.0)
+time_a = calculate_charging_time(battery_kwh,effective_kw_a,start_pct,end_pct,apply_taper)
+time_b = calculate_charging_time(battery_kwh,effective_kw_b,start_pct,end_pct,apply_taper)
+cost_a = calculate_charging_cost(energy_needed,time_a,provider_a["energy"],provider_a["time"],0)
+cost_b = calculate_charging_cost(energy_needed,time_b,provider_b["energy"],provider_b["time"],0)
 
-def main():
-    st.set_page_config(page_title=Config.APP_TITLE, page_icon=Config.APP_ICON, layout=Config.PAGE_LAYOUT)
-    apply_custom_styles()
-    render_hero_section()
-    render_location_input()
-    # ... Your existing code for vehicle selection, session config, providers, and results goes here
-    # e.g., battery_kwh, car_max_kw = render_vehicle_selector(ios_safe_mode=False)
-    # ... etc.
+# Results Display
+st.markdown("---")
+st.markdown("## 📊 Comparison Results")
+col1,col2 = st.columns(2)
+col1.metric(provider_a_name,format_currency(cost_a,"GBP"),format_time(time_a))
+col2.metric(provider_b_name,format_currency(cost_b,"GBP"),format_time(time_b))
 
-if __name__ == "__main__":
-    main()
+st.markdown(f"💵 Potential Savings: {format_currency(abs(cost_a-cost_b),'GBP')}")
