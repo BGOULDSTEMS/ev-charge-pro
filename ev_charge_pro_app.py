@@ -13,11 +13,8 @@ from datetime import datetime
 import streamlit as st
 
 import folium
-from streamlit_folium 
-import st_folium
-import geopy
-from geopy.geocoders 
-import Nominatim
+from streamlit_folium import st_folium
+from geopy.geocoders import Nominatim
 
 # ============================================================================
 # CONFIGURATION & DATA
