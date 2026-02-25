@@ -288,7 +288,7 @@ st.markdown(
 )
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Vehicle & Session (Top Banner Controls)")
+st.subheader("Vehicle & Session)")
 
 mode_col1, _ = st.columns([1.8, 4])
 with mode_col1:
