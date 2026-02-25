@@ -1,6 +1,3 @@
-You’re right. Here is the full file again in one single copy/paste code block:
-
-```python
 import numpy as np
 import pandas as pd
 import requests
