@@ -57,7 +57,7 @@ st.markdown(
 )
 
 # ---------------------------------------------------
-# VEHICLES (TOP UK EVS + MAX DC kW)
+# DEFAULT VEHICLES (Top UK EVs + max DC rate)
 # ---------------------------------------------------
 DEFAULT_VEHICLES = pd.DataFrame(
     [
@@ -85,40 +85,89 @@ DEFAULT_VEHICLES = pd.DataFrame(
 )
 
 # ---------------------------------------------------
-# PROVIDERS (public + home)
-# category: Public or Home
-# one row = one provider + charger speed
+# DEFAULT PROVIDERS
+# one row = one provider + one charger speed
 # ---------------------------------------------------
 DEFAULT_PROVIDERS = pd.DataFrame(
     [
-        # Public networks/cards
-        {"provider": "MFG EV Power", "category": "Public", "charger_kw": 150, "energy_price": 0.79, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Edit to local tariff if needed."},
-        {"provider": "EVYVE Charging Stations", "category": "Public", "charger_kw": 150, "energy_price": 0.80, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Edit to local tariff if needed."},
-        {"provider": "Osprey Charging (App)", "category": "Public", "charger_kw": 150, "energy_price": 0.82, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Edit to local tariff if needed."},
-        {"provider": "Osprey Charging (Contactless)", "category": "Public", "charger_kw": 150, "energy_price": 0.87, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Edit to local tariff if needed."},
-        {"provider": "Electroverse", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Variable by partner network."},
-        {"provider": "Zapmap Zap-Pay", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Variable by network."},
-        {"provider": "Plugsurfing", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Variable by operator."},
-        {"provider": "IZIVIA Pass", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "EUR", "notes": "Variable roaming."},
-        {"provider": "Electra+", "category": "Public", "charger_kw": 150, "energy_price": 0.49, "time_price": 0.00, "session_fee": 0.00, "currency": "EUR", "notes": "Country/plan dependent."},
-        {"provider": "Pod Point", "category": "Public", "charger_kw": 75, "energy_price": 0.69, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Site dependent."},
-        {"provider": "BP Pulse PAYG App", "category": "Public", "charger_kw": 150, "energy_price": 0.87, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Edit to latest tariff if needed."},
-        {"provider": "Freshmile", "category": "Public", "charger_kw": 50, "energy_price": 0.25, "time_price": 0.05, "session_fee": 0.00, "currency": "EUR", "notes": "kWh + per-minute model; verify in app for station."},
+        {"provider": "MFG EV Power", "category": "Public", "charger_kw": 150, "energy_price": 0.79, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Verify local site tariff."},
+        {"provider": "EVYVE Charging Stations", "category": "Public", "charger_kw": 150, "energy_price": 0.80, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Verify local site tariff."},
+        {"provider": "Osprey Charging (App)", "category": "Public", "charger_kw": 150, "energy_price": 0.82, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Verify local site tariff."},
+        {"provider": "Osprey Charging (Contactless)", "category": "Public", "charger_kw": 150, "energy_price": 0.87, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Verify local site tariff."},
+        {"provider": "Electroverse", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Variable by roaming partner; enter live kWh."},
+        {"provider": "Zapmap Zap-Pay", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Variable by network; enter live kWh."},
+        {"provider": "Plugsurfing", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Variable by operator; enter live kWh."},
+        {"provider": "IZIVIA Pass", "category": "Public", "charger_kw": 150, "energy_price": np.nan, "time_price": 0.00, "session_fee": 0.00, "currency": "EUR", "notes": "Variable roaming; enter live kWh."},
+        {"provider": "Electra+", "category": "Public", "charger_kw": 150, "energy_price": 0.49, "time_price": 0.00, "session_fee": 0.00, "currency": "EUR", "notes": "Country/plan dependent; verify."},
+        {"provider": "Pod Point", "category": "Public", "charger_kw": 75, "energy_price": 0.69, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Site dependent; verify."},
+        {"provider": "BP Pulse PAYG App", "category": "Public", "charger_kw": 150, "energy_price": 0.87, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Verify latest tariff."},
+        {"provider": "Freshmile", "category": "Public", "charger_kw": 50, "energy_price": 0.25, "time_price": 0.05, "session_fee": 0.00, "currency": "EUR", "notes": "kWh + per-minute model; verify by station."},
 
-        # Home providers (energy price will be overridden by slider 6p-30p)
-        {"provider": "Home - Octopus", "category": "Home", "charger_kw": 7, "energy_price": 0.08, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Set your own home tariff with slider."},
-        {"provider": "Home - E.ON Next", "category": "Home", "charger_kw": 7, "energy_price": 0.09, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Set your own home tariff with slider."},
-        {"provider": "Home - EDF", "category": "Home", "charger_kw": 7, "energy_price": 0.10, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Set your own home tariff with slider."},
+        {"provider": "Home - Octopus", "category": "Home", "charger_kw": 7, "energy_price": 0.08, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Home tariff controlled by slider (6p-30p)."},
+        {"provider": "Home - E.ON Next", "category": "Home", "charger_kw": 7, "energy_price": 0.09, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Home tariff controlled by slider (6p-30p)."},
+        {"provider": "Home - EDF", "category": "Home", "charger_kw": 7, "energy_price": 0.10, "time_price": 0.00, "session_fee": 0.00, "currency": "GBP", "notes": "Home tariff controlled by slider (6p-30p)."},
     ]
 )
+
+# ---------------------------------------------------
+# SCHEMA SAFETY (fixes session-state KeyError issues)
+# ---------------------------------------------------
+def ensure_vehicle_schema(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    required_defaults = {
+        "model": "",
+        "battery_kwh": 60.0,
+        "max_dc_kw": 150.0,
+    }
+    for col, default in required_defaults.items():
+        if col not in out.columns:
+            out[col] = default
+
+    out["model"] = out["model"].astype(str).str.strip()
+    out["battery_kwh"] = pd.to_numeric(out["battery_kwh"], errors="coerce").fillna(60.0)
+    out["max_dc_kw"] = pd.to_numeric(out["max_dc_kw"], errors="coerce").fillna(150.0)
+    out = out[out["model"] != ""]
+    return out.reset_index(drop=True)
+
+
+def ensure_provider_schema(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    required_defaults = {
+        "provider": "",
+        "category": "Public",
+        "charger_kw": 50.0,
+        "energy_price": np.nan,
+        "time_price": 0.0,
+        "session_fee": 0.0,
+        "currency": "GBP",
+        "notes": "",
+    }
+    for col, default in required_defaults.items():
+        if col not in out.columns:
+            out[col] = default
+
+    out["provider"] = out["provider"].astype(str).str.strip()
+    out["category"] = out["category"].astype(str).str.strip()
+    out["currency"] = out["currency"].astype(str).str.upper().str.strip()
+
+    for c in ["charger_kw", "energy_price", "time_price", "session_fee"]:
+        out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    out = out[out["provider"] != ""]
+    return out.reset_index(drop=True)
+
 
 if "vehicles_df" not in st.session_state:
     st.session_state.vehicles_df = DEFAULT_VEHICLES.copy()
 if "providers_df" not in st.session_state:
     st.session_state.providers_df = DEFAULT_PROVIDERS.copy()
 
+# Always repair schema on every run
+st.session_state.vehicles_df = ensure_vehicle_schema(st.session_state.vehicles_df)
+st.session_state.providers_df = ensure_provider_schema(st.session_state.providers_df)
+
 # ---------------------------------------------------
-# LIVE FX (EUR base -> GBP, USD)
+# FX
 # ---------------------------------------------------
 @st.cache_data(ttl=1800)
 def get_fx_rates():
@@ -127,11 +176,11 @@ def get_fx_rates():
         r = requests.get("https://api.frankfurter.app/latest?from=EUR&to=GBP,USD", timeout=7)
         r.raise_for_status()
         data = r.json()
-        rates = data.get("rates", {})
+        rr = data.get("rates", {})
         return {
             "EUR": 1.0,
-            "GBP": float(rates.get("GBP", fallback["GBP"])),
-            "USD": float(rates.get("USD", fallback["USD"])),
+            "GBP": float(rr.get("GBP", fallback["GBP"])),
+            "USD": float(rr.get("USD", fallback["USD"])),
             "_date": data.get("date", "unknown"),
         }
     except Exception:
@@ -176,17 +225,6 @@ def charging_time_minutes(battery_kwh, effective_kw, start_pct, end_pct, taper=T
     return mins
 
 
-def sanitize_df(df):
-    x = df.copy()
-    for col in ["charger_kw", "energy_price", "time_price", "session_fee"]:
-        x[col] = pd.to_numeric(x[col], errors="coerce")
-    x["provider"] = x["provider"].astype(str).str.strip()
-    x["category"] = x["category"].astype(str).str.strip()
-    x["currency"] = x["currency"].astype(str).str.upper().str.strip()
-    x = x.dropna(subset=["provider", "charger_kw", "currency"])
-    return x[x["provider"] != ""]
-
-
 def select_provider(label, key_prefix, providers_df):
     provider_names = sorted(providers_df["provider"].dropna().unique().tolist())
     provider_name = st.selectbox(f"{label} Provider", provider_names, key=f"{key_prefix}_provider")
@@ -201,34 +239,33 @@ def select_provider(label, key_prefix, providers_df):
     )
 
     row = p_df[np.isclose(p_df["charger_kw"], charger_kw)].iloc[0]
-    category = row["category"]
-    currency = row["currency"]
+    category = str(row["category"]).strip()
+    currency = str(row["currency"]).strip().upper()
 
-    energy_price = row["energy_price"] if not pd.isna(row["energy_price"]) else 0.0
+    energy_price = row["energy_price"] if not pd.isna(row["energy_price"]) else np.nan
     time_price = row["time_price"] if not pd.isna(row["time_price"]) else 0.0
     session_fee = row["session_fee"] if not pd.isna(row["session_fee"]) else 0.0
 
-    # Home tariff slider 6p-30p (GBP/kWh)
     if category.lower() == "home":
         home_pence = st.slider(
             f"{label} Home Tariff (p/kWh)",
             min_value=6,
             max_value=30,
-            value=int(round(float(energy_price) * 100)) if energy_price > 0 else 8,
-            key=f"{key_prefix}_home_tariff",
-            help="Home tariff override between 6p and 30p per kWh.",
+            value=8,
+            key=f"{key_prefix}_home_pence",
+            help="Set home price from 6p to 30p per kWh.",
         )
         energy_price = home_pence / 100.0
         currency = "GBP"
-        time_price = 0.0  # most home tariffs modeled as energy-only
+        time_price = 0.0
         session_fee = 0.0
-    elif pd.isna(row["energy_price"]):
+    elif pd.isna(energy_price):
         energy_price = st.number_input(
             f"{label} Live Energy Price ({currency}/kWh)",
             min_value=0.0,
             value=0.75,
             step=0.01,
-            key=f"{key_prefix}_live_kwh",
+            key=f"{key_prefix}_live_energy",
         )
 
     st.caption(f"{label} Notes: {row.get('notes', '')}")
@@ -251,23 +288,29 @@ st.markdown(
     """
     <div class="hero">
       <h2 style="margin:0;">EV Charge Pro UK</h2>
-      <p>Compares providers by charger speed, car max charging capability, and live FX conversion.</p>
+      <p>Compare providers using charger speed, car max charging capability, and mixed tariff models (kWh + per-minute).</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------
-# SIDEBAR JOURNEY
+# SIDEBAR
 # ---------------------------------------------------
 with st.sidebar:
     st.header("Journey Setup")
-    vehicle_names = st.session_state.vehicles_df["model"].dropna().tolist()
-    vehicle = st.selectbox("Vehicle", vehicle_names)
 
-    v_row = st.session_state.vehicles_df[st.session_state.vehicles_df["model"] == vehicle].iloc[0]
-    battery_kwh = float(v_row["battery_kwh"])
-    default_max_dc = float(v_row["max_dc_kw"])
+    vehicles_df = ensure_vehicle_schema(st.session_state.vehicles_df)
+    if vehicles_df.empty:
+        st.error("Vehicle list is empty. Add at least one vehicle in 'Edit Vehicle List'.")
+        st.stop()
+
+    vehicle = st.selectbox("Vehicle", vehicles_df["model"].tolist())
+    v_match = vehicles_df[vehicles_df["model"] == vehicle]
+    v_row = v_match.iloc[0] if not v_match.empty else vehicles_df.iloc[0]
+
+    battery_kwh = float(v_row.get("battery_kwh", 60.0))
+    default_max_dc = float(v_row.get("max_dc_kw", 150.0))
 
     vehicle_max_kw = st.slider(
         "Car Max DC Charging (kW)",
@@ -289,38 +332,40 @@ with st.sidebar:
     comparison_currency = st.selectbox("Compare In", ["GBP", "EUR", "USD"], index=0)
 
 # ---------------------------------------------------
-# EDITABLE TABLES
+# EDIT DATABASES
 # ---------------------------------------------------
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 st.subheader("Provider Database (Add unlimited rows)")
-st.caption("Each row = one provider + one charger speed. Include kWh, per-minute, session fee as needed.")
-st.session_state.providers_df = st.data_editor(
+st.caption("One row = one provider + one charger speed. Add per-minute and session fee where applicable (e.g., Freshmile).")
+edited_providers = st.data_editor(
     st.session_state.providers_df,
     num_rows="dynamic",
     use_container_width=True,
     key="provider_editor",
 )
+st.session_state.providers_df = ensure_provider_schema(edited_providers)
 st.markdown("</div>", unsafe_allow_html=True)
 
 with st.expander("Edit Vehicle List"):
-    st.session_state.vehicles_df = st.data_editor(
+    edited_vehicles = st.data_editor(
         st.session_state.vehicles_df,
         num_rows="dynamic",
         use_container_width=True,
         key="vehicle_editor",
     )
+    st.session_state.vehicles_df = ensure_vehicle_schema(edited_vehicles)
 
-providers_clean = sanitize_df(st.session_state.providers_df)
+providers_clean = ensure_provider_schema(st.session_state.providers_df)
 
 # ---------------------------------------------------
-# PROVIDER COMPARISON
+# COMPARE PROVIDERS
 # ---------------------------------------------------
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 st.subheader("Compare Two Providers")
-c1, c2 = st.columns(2)
-with c1:
+col_a, col_b = st.columns(2)
+with col_a:
     provider_a = select_provider("Provider A", "provider_a", providers_clean)
-with c2:
+with col_b:
     provider_b = select_provider("Provider B", "provider_b", providers_clean)
 
 run_compare = st.button("Compare Providers", type="primary", use_container_width=True)
@@ -334,7 +379,7 @@ if run_compare:
         energy_needed *= (1 + efficiency_loss / 100.0)
         miles_added = energy_needed * miles_per_kwh
 
-        # key logic requested: cap by car max kW
+        # Key logic: cap station speed by car max speed
         effective_kw_a = min(provider_a["charger_kw"], float(vehicle_max_kw))
         effective_kw_b = min(provider_b["charger_kw"], float(vehicle_max_kw))
 
@@ -368,7 +413,7 @@ if run_compare:
             f"Provider B effective power: min({provider_b['charger_kw']:.0f}kW station, {vehicle_max_kw:.0f}kW car) = **{effective_kw_b:.0f}kW**"
         )
 
-        # Cost curve to 100%
+        # Cost curve from current SOC to 100%
         pct_range = np.linspace(start_pct, 100, 24)
         curve_a, curve_b = [], []
         for pct in pct_range:
@@ -394,7 +439,6 @@ if run_compare:
         st.line_chart(df_chart.set_index("Charge %"), use_container_width=True)
 
 st.markdown(
-    f'<p class="small-note">Live FX (Frankfurter/ECB): EUR→GBP {rates["GBP"]:.5f}, EUR→USD {rates["USD"]:.5f}, date {rates["_date"]}. '
-    "Tariffs vary by site/time and should be verified in-app before charging.</p>",
+    f'<p class="small-note">Live FX (Frankfurter/ECB): EUR→GBP {rates["GBP"]:.5f}, EUR→USD {rates["USD"]:.5f}, date {rates["_date"]}. Tariffs vary by provider/site/time, so verify before charging.</p>',
     unsafe_allow_html=True,
 )
