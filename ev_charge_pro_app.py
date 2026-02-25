@@ -1,3 +1,4 @@
+```python
 import numpy as np
 import pandas as pd
 import requests
@@ -8,63 +9,86 @@ st.set_page_config(page_title="EV Charge Pro UK", page_icon="⚡", layout="wide"
 st.markdown(
     """
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
       :root{
-        --bg:#070b14;
-        --card:rgba(16,24,42,.78);
-        --line:rgba(153,177,214,.24);
-        --text:#e8eefc;
-        --muted:#9cb0d1;
+        --bg:#060a12;
+        --bg-2:#0a1220;
+        --card:rgba(11,18,33,.86);
+        --line:rgba(120,150,205,.30);
+        --text:#ffffff;
+        --text-soft:#e7eefc;
+      }
+
+      html, body, [data-testid="stAppViewContainer"] {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
       }
 
       .stApp{
         background:
-          radial-gradient(1200px 420px at 10% -15%, rgba(30,200,255,.20), transparent 58%),
-          radial-gradient(1000px 380px at 95% -20%, rgba(46,230,185,.18), transparent 60%),
-          linear-gradient(180deg,#050912 0%,#070b14 100%);
-        color:var(--text);
-        font-family:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+          radial-gradient(1200px 420px at 10% -15%, rgba(0,173,239,.18), transparent 58%),
+          radial-gradient(1000px 380px at 95% -20%, rgba(0,120,255,.14), transparent 60%),
+          linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+        color: var(--text);
+        font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
-      .block-container{max-width:1280px;padding-top:.8rem;padding-bottom:2rem;}
-      h1,h2,h3,h4{font-family:"Space Grotesk","Manrope",sans-serif;color:var(--text);letter-spacing:-.02em;}
+      .block-container{max-width:1280px;padding-top:.55rem;padding-bottom:1.8rem;}
+      h1,h2,h3,h4{color:var(--text);letter-spacing:-.01em;font-family:"IBM Plex Sans",sans-serif;font-weight:600;}
+
+      /* iOS scroll friendliness around sliders */
+      div[data-testid="stSlider"], div[data-testid="stSlider"] * {
+        touch-action: pan-y !important;
+      }
+
+      .top-banner{
+        background: rgba(7, 13, 24, 0.86);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: .75rem 1rem;
+        margin-bottom: .8rem;
+      }
 
       .hero{
         border:1px solid var(--line);
         border-radius:18px;
         overflow:hidden;
-        margin-bottom:1rem;
-        min-height:220px;
+        margin-bottom:.9rem;
+        min-height:190px;
         background-image:
-          linear-gradient(110deg,rgba(6,12,24,.92) 16%,rgba(6,12,24,.65) 48%,rgba(6,12,24,.25) 100%),
+          linear-gradient(108deg, rgba(4,9,17,.92) 16%, rgba(4,9,17,.65) 52%, rgba(4,9,17,.22) 100%),
           url('https://images.unsplash.com/photo-1593941707874-ef25b8b4a92b?auto=format&fit=crop&w=2000&q=80');
         background-size:cover;
         background-position:center;
       }
 
-      .hero-content{padding:1.35rem 1.25rem;max-width:700px;}
-      .hero p{margin:.35rem 0 0;color:#c8d8f5;}
+      .hero-content{padding:1.2rem 1.15rem;max-width:760px;}
+      .hero p{margin:.3rem 0 0;color:var(--text-soft);}
 
       .panel{
         background:var(--card);
         border:1px solid var(--line);
         border-radius:14px;
-        padding:.95rem 1rem .8rem;
-        margin-bottom:.9rem;
+        padding:.88rem 1rem .72rem;
+        margin-bottom:.85rem;
         backdrop-filter:blur(8px);
       }
 
+      .small-note{color:var(--text-soft);font-size:.9rem;}
       div[data-testid="stMetric"]{
-        background:rgba(10,18,34,.86);
+        background: rgba(7,13,24,.90);
         border:1px solid var(--line);
         border-radius:12px;
-        padding:.8rem .9rem;
+        padding:.75rem .88rem;
       }
-
-      div[data-testid="stMetricLabel"]{color:#a9bde0;}
+      div[data-testid="stMetricLabel"]{color:var(--text-soft);}
       .stButton > button{min-height:46px;font-weight:700;border-radius:10px;}
-      .small-note{color:var(--muted);font-size:.9rem;}
+      label, .stSelectbox label, .stCheckbox label, .stNumberInput label { color: var(--text) !important; }
+
+      @media (max-width: 920px){
+        .block-container{padding-left:.7rem;padding-right:.7rem;}
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -114,7 +138,6 @@ PROVIDER_PRESETS = {
     "Home Charging (EDF-style)": {"energy": 0.10, "time": 0.00, "currency": "GBP", "default_kw": 7, "type": "home"},
 }
 
-
 @st.cache_data(ttl=1800)
 def get_fx_rates():
     fallback = {"EUR": 1.0, "GBP": 0.87, "USD": 1.10, "_date": "fallback"}
@@ -132,9 +155,7 @@ def get_fx_rates():
     except Exception:
         return fallback
 
-
 rates = get_fx_rates()
-
 
 def convert(amount, from_curr, to_curr):
     if from_curr == to_curr:
@@ -143,7 +164,6 @@ def convert(amount, from_curr, to_curr):
         return amount
     eur_value = amount if from_curr == "EUR" else amount / rates[from_curr]
     return eur_value * rates[to_curr]
-
 
 def charging_time_minutes(battery_kwh, effective_kw, start_pct, end_pct, taper=True):
     if effective_kw <= 0 or end_pct <= start_pct:
@@ -172,14 +192,14 @@ def charging_time_minutes(battery_kwh, effective_kw, start_pct, end_pct, taper=T
         current = next_stop
     return mins
 
+def numeric_or_slider(label, min_value, max_value, value, step, key, ios_safe_mode):
+    if ios_safe_mode:
+        return st.number_input(label, min_value=min_value, max_value=max_value, value=value, step=step, key=key)
+    return st.slider(label, min_value=min_value, max_value=max_value, value=value, step=step, key=key)
 
-def provider_controls(label, key_prefix, car_max):
+def provider_controls(label, key_prefix, car_max, ios_safe_mode):
     st.markdown(f"### {label}")
-    provider_name = st.selectbox(
-        f"{label} Provider",
-        list(PROVIDER_PRESETS.keys()),
-        key=f"{key_prefix}_name",
-    )
+    provider_name = st.selectbox(f"{label} Provider", list(PROVIDER_PRESETS.keys()), key=f"{key_prefix}_name")
     preset = PROVIDER_PRESETS[provider_name]
 
     currency = st.selectbox(
@@ -189,36 +209,23 @@ def provider_controls(label, key_prefix, car_max):
         key=f"{key_prefix}_currency",
     )
 
-    station_kw = st.slider(
+    station_kw = numeric_or_slider(
         f"{label} Charger Capacity (kW)",
-        min_value=3,
-        max_value=400,
-        value=min(400, int(preset["default_kw"])),
-        step=1,
-        key=f"{key_prefix}_kw",
-        help="Supports up to 400kW chargers.",
+        3, 400, min(400, int(preset["default_kw"])), 1, f"{key_prefix}_kw", ios_safe_mode
     )
 
     if preset["type"] == "home":
-        home_pence = st.slider(
+        home_pence = numeric_or_slider(
             f"{label} Home Tariff (p/kWh)",
-            min_value=6,
-            max_value=30,
-            value=max(6, min(30, int(round(preset["energy"] * 100)))),
-            step=1,
-            key=f"{key_prefix}_home_pence",
+            6, 30, max(6, min(30, int(round(preset["energy"] * 100)))), 1, f"{key_prefix}_home_pence", ios_safe_mode
         )
-        energy_price = home_pence / 100.0
+        energy_price = float(home_pence) / 100.0
         time_price = 0.0
         session_fee = 0.0
     else:
-        energy_price = st.slider(
+        energy_price = numeric_or_slider(
             f"{label} Energy Price ({currency}/kWh)",
-            min_value=0.00,
-            max_value=1.50,
-            value=float(preset["energy"]),
-            step=0.01,
-            key=f"{key_prefix}_energy",
+            0.00, 1.50, float(preset["energy"]), 0.01, f"{key_prefix}_energy", ios_safe_mode
         )
 
         use_per_min = st.checkbox(
@@ -227,29 +234,21 @@ def provider_controls(label, key_prefix, car_max):
             key=f"{key_prefix}_use_per_min",
         )
 
-        time_price = st.slider(
-            f"{label} Time Price ({currency}/min)",
-            min_value=0.00,
-            max_value=1.00,
-            value=float(max(preset["time"], 0.01)) if use_per_min else 0.00,
-            step=0.01,
-            key=f"{key_prefix}_time",
-            disabled=not use_per_min,
-        )
+        if use_per_min:
+            time_price = numeric_or_slider(
+                f"{label} Time Price ({currency}/min)",
+                0.00, 1.00, float(max(preset["time"], 0.01)), 0.01, f"{key_prefix}_time", ios_safe_mode
+            )
+        else:
+            time_price = 0.0
 
-        session_fee = st.slider(
+        session_fee = numeric_or_slider(
             f"{label} Session Fee ({currency})",
-            min_value=0.00,
-            max_value=5.00,
-            value=0.00,
-            step=0.05,
-            key=f"{key_prefix}_session",
+            0.00, 5.00, 0.00, 0.05, f"{key_prefix}_session", ios_safe_mode
         )
 
     effective_kw = min(float(station_kw), float(car_max))
-    st.caption(
-        f"Effective power: min({station_kw}kW station, {int(car_max)}kW car) = {effective_kw:.0f}kW"
-    )
+    st.caption(f"Effective power: min({station_kw}kW station, {int(car_max)}kW car) = {effective_kw:.0f}kW")
 
     return {
         "provider": provider_name,
@@ -261,13 +260,14 @@ def provider_controls(label, key_prefix, car_max):
         "session_fee": float(session_fee),
     }
 
+st.markdown('<div class="top-banner"><strong>EV Charge Pro UK</strong> <span style="color:#d7e5ff; margin-left:10px;">Corporate Cost Comparison</span></div>', unsafe_allow_html=True)
 
 st.markdown(
     """
     <div class="hero">
       <div class="hero-content">
-        <h2 style="margin:0;">EV Charge Pro UK</h2>
-        <p>Compare providers with independent charger speed, live kWh pricing, per-minute fee, and car charging-cap limits.</p>
+        <h2 style="margin:0;">Charge Cost Comparison</h2>
+        <p>Top banner controls, white text for readability, and iOS-safe input mode to avoid accidental slider changes while scrolling.</p>
       </div>
     </div>
     """,
@@ -275,47 +275,40 @@ st.markdown(
 )
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Vehicle & Session")
+st.subheader("Vehicle & Session (Top Banner Controls)")
 
-c1, c2, c3, c4 = st.columns([2.2, 1.1, 1.2, 1.2])
+mode_col1, mode_col2 = st.columns([1.5, 4])
+with mode_col1:
+    ios_safe_mode = st.toggle("iOS Scroll Safe Inputs", value=True, help="Uses number inputs instead of sliders to prevent accidental value changes while scrolling on iPhone.")
 
-with c1:
+top1, top2, top3, top4 = st.columns([2.2, 1.1, 1.2, 1.2])
+
+with top1:
     vehicle_name = st.selectbox("Vehicle", VEHICLES["model"].tolist(), index=7)
 
 row = VEHICLES[VEHICLES["model"] == vehicle_name].iloc[0]
 default_battery = float(row["battery_kwh"])
 default_max = float(row["max_dc_kw"])
 
-with c2:
+with top2:
     if vehicle_name == "Custom":
-        battery_kwh = st.number_input(
-            "Battery (kWh)", min_value=10.0, max_value=220.0, value=80.0, step=0.5
-        )
+        battery_kwh = st.number_input("Battery (kWh)", min_value=10.0, max_value=220.0, value=80.0, step=0.5)
     else:
-        battery_kwh = st.number_input(
-            "Battery (kWh)", min_value=10.0, max_value=220.0, value=default_battery, step=0.1
-        )
+        battery_kwh = st.number_input("Battery (kWh)", min_value=10.0, max_value=220.0, value=default_battery, step=0.1)
 
-with c3:
-    car_max_kw = st.slider(
-        "Car Max DC (kW)",
-        min_value=20,
-        max_value=400,
-        value=int(default_max),
-        step=1,
-        help="Higher-power chargers only help until this cap.",
-    )
+with top3:
+    car_max_kw = numeric_or_slider("Car Max DC (kW)", 20, 400, int(default_max), 1, "car_max_kw", ios_safe_mode)
 
-with c4:
+with top4:
     comparison_currency = st.selectbox("Compare In", ["GBP", "EUR", "USD"], index=0)
 
-d1, d2, d3 = st.columns([1.2, 1.2, 1.6])
-with d1:
-    start_pct = st.slider("Current Charge (%)", 0, 100, 20)
-with d2:
-    end_pct = st.slider("Target Charge (%)", 0, 100, 80)
-with d3:
-    efficiency_loss = st.slider("Charging Loss (%)", 0, 20, 6)
+bottom1, bottom2, bottom3 = st.columns([1.2, 1.2, 1.6])
+with bottom1:
+    start_pct = numeric_or_slider("Current Charge (%)", 0, 100, 20, 1, "start_pct", ios_safe_mode)
+with bottom2:
+    end_pct = numeric_or_slider("Target Charge (%)", 0, 100, 80, 1, "end_pct", ios_safe_mode)
+with bottom3:
+    efficiency_loss = numeric_or_slider("Charging Loss (%)", 0, 20, 6, 1, "eff_loss", ios_safe_mode)
 
 taper = st.checkbox("Apply taper model (slowdown above 80/90%)", value=True)
 miles_per_kwh = st.number_input("Miles per kWh", min_value=1.0, max_value=7.0, value=3.5, step=0.1)
@@ -326,9 +319,9 @@ st.subheader("Compare Providers")
 
 p1, p2 = st.columns(2)
 with p1:
-    provider_a = provider_controls("Provider A", "a", car_max_kw)
+    provider_a = provider_controls("Provider A", "a", car_max_kw, ios_safe_mode)
 with p2:
-    provider_b = provider_controls("Provider B", "b", car_max_kw)
+    provider_b = provider_controls("Provider B", "b", car_max_kw, ios_safe_mode)
 
 run_compare = st.button("Compare Providers", type="primary", use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
@@ -340,23 +333,11 @@ if run_compare:
         energy_needed = battery_kwh * ((end_pct - start_pct) / 100.0)
         energy_needed *= (1.0 + efficiency_loss / 100.0)
 
-        time_a = charging_time_minutes(
-            battery_kwh, provider_a["effective_kw"], start_pct, end_pct, taper=taper
-        )
-        time_b = charging_time_minutes(
-            battery_kwh, provider_b["effective_kw"], start_pct, end_pct, taper=taper
-        )
+        time_a = charging_time_minutes(battery_kwh, provider_a["effective_kw"], start_pct, end_pct, taper=taper)
+        time_b = charging_time_minutes(battery_kwh, provider_b["effective_kw"], start_pct, end_pct, taper=taper)
 
-        native_a = (
-            energy_needed * provider_a["energy_price"]
-            + time_a * provider_a["time_price"]
-            + provider_a["session_fee"]
-        )
-        native_b = (
-            energy_needed * provider_b["energy_price"]
-            + time_b * provider_b["time_price"]
-            + provider_b["session_fee"]
-        )
+        native_a = energy_needed * provider_a["energy_price"] + time_a * provider_a["time_price"] + provider_a["session_fee"]
+        native_b = energy_needed * provider_b["energy_price"] + time_b * provider_b["time_price"] + provider_b["session_fee"]
 
         total_a = convert(native_a, provider_a["currency"], comparison_currency)
         total_b = convert(native_b, provider_b["currency"], comparison_currency)
@@ -411,12 +392,8 @@ if run_compare:
             e = battery_kwh * ((pct - start_pct) / 100.0)
             e *= (1.0 + efficiency_loss / 100.0)
 
-            ta = charging_time_minutes(
-                battery_kwh, provider_a["effective_kw"], start_pct, pct, taper=taper
-            )
-            tb = charging_time_minutes(
-                battery_kwh, provider_b["effective_kw"], start_pct, pct, taper=taper
-            )
+            ta = charging_time_minutes(battery_kwh, provider_a["effective_kw"], start_pct, pct, taper=taper)
+            tb = charging_time_minutes(battery_kwh, provider_b["effective_kw"], start_pct, pct, taper=taper)
 
             na = e * provider_a["energy_price"] + ta * provider_a["time_price"] + provider_a["session_fee"]
             nb = e * provider_b["energy_price"] + tb * provider_b["time_price"] + provider_b["session_fee"]
@@ -438,3 +415,4 @@ st.markdown(
     f'<p class="small-note">Live FX (Frankfurter/ECB): EUR→GBP {rates["GBP"]:.5f}, EUR→USD {rates["USD"]:.5f}, date {rates["_date"]}. Tariffs vary by site/time; verify before charging.</p>',
     unsafe_allow_html=True,
 )
+```
