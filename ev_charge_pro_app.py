@@ -1218,7 +1218,109 @@ def main():
                         battery_kwh, start_pct, end_pct, efficiency_loss, miles_per_kwh,
                         apply_taper, provider_a, provider_b, comparison_currency, exchange_rates
                     )
-    
+    # ============================================================================
+# ROUTE PLANNER MODULE (IONITY STYLE)
+# ============================================================================
+
+import folium
+from streamlit_folium import st_folium
+import openrouteservice
+from openrouteservice import convert
+
+st.markdown("---")
+st.markdown("## 🗺 EV Route Planner")
+st.caption("Plan long journeys • Estimate charging stops • Visual route mapping")
+
+with st.container():
+
+    col_r1, col_r2, col_r3 = st.columns([2,2,1])
+
+    with col_r1:
+        start_location = st.text_input("Start Location", "Eastbourne")
+
+    with col_r2:
+        end_location = st.text_input("Destination", "Manchester")
+
+    with col_r3:
+        plan_route = st.button("Plan Route", use_container_width=True)
+
+    if plan_route:
+
+        ORS_API_KEY = st.secrets.get("ORS_API_KEY", None)
+
+        if not ORS_API_KEY:
+            st.error("Missing OpenRouteService API key. Add ORS_API_KEY to Streamlit secrets.")
+        else:
+
+            try:
+                client = openrouteservice.Client(key=ORS_API_KEY)
+
+                # Geocode start & end
+                start_geo = client.pelias_search(text=start_location)["features"][0]["geometry"]["coordinates"]
+                end_geo = client.pelias_search(text=end_location)["features"][0]["geometry"]["coordinates"]
+
+                route = client.directions(
+                    coordinates=[start_geo, end_geo],
+                    profile="driving-car",
+                    format="geojson"
+                )
+
+                distance_km = route["features"][0]["properties"]["summary"]["distance"] / 1000
+                duration_min = route["features"][0]["properties"]["summary"]["duration"] / 60
+
+                distance_miles = distance_km * 0.621371
+
+                # Real world max range (10–80% window)
+                usable_battery = battery_kwh * 0.70
+                max_range = usable_battery * miles_per_kwh
+
+                required_stops = max(0, int(distance_miles // max_range))
+
+                # Estimate energy required
+                total_energy_needed = distance_miles / miles_per_kwh
+
+                # Estimate cost using Provider A
+                energy_price = provider_a["energy_price"]
+                est_cost_native = total_energy_needed * energy_price
+
+                est_cost = convert_currency(
+                    est_cost_native,
+                    provider_a["currency"],
+                    comparison_currency,
+                    exchange_rates
+                )
+
+                # Display Metrics
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+
+                col_m1.metric("Distance", f"{distance_miles:.1f} mi")
+                col_m2.metric("Drive Time", format_time(duration_min))
+                col_m3.metric("Charging Stops Needed", required_stops)
+                col_m4.metric("Estimated Charging Cost",
+                              format_currency(est_cost, comparison_currency))
+
+                # Map Rendering
+                m = folium.Map(location=[start_geo[1], start_geo[0]], zoom_start=6)
+
+                folium.GeoJson(route).add_to(m)
+
+                folium.Marker(
+                    [start_geo[1], start_geo[0]],
+                    tooltip="Start",
+                    icon=folium.Icon(color="green")
+                ).add_to(m)
+
+                folium.Marker(
+                    [end_geo[1], end_geo[0]],
+                    tooltip="Destination",
+                    icon=folium.Icon(color="red")
+                ).add_to(m)
+
+                st_folium(m, width=1200, height=600)
+
+            except Exception as e:
+                st.error("Route calculation failed. Check locations or API key.")
+   
     # Footer
     st.markdown("---")
     st.markdown("""
