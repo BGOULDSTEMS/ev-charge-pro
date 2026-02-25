@@ -12,6 +12,13 @@ from datetime import datetime
 
 import streamlit as st
 
+import folium
+from streamlit_folium 
+import st_folium
+import geopy
+from geopy.geocoders 
+import Nominatim
+
 # ============================================================================
 # CONFIGURATION & DATA
 # ============================================================================
@@ -264,7 +271,22 @@ def format_currency(amount: float, currency: str) -> str:
     symbol = symbols.get(currency, currency)
     return f"{symbol}{amount:.2f}"
 
-
+@st.cache_data(ttl=Config.CACHE_TTL)
+def geocode_postcode(postcode: str) -> Optional[Tuple[float, float]]:
+    """
+    Convert a UK postcode to latitude and longitude using Nominatim
+    Returns (lat, lon) or None if not found
+    """
+    geolocator = Nominatim(user_agent="ev_charge_pro_app")
+    try:
+        location = geolocator.geocode(postcode)
+        if location:
+            return (location.latitude, location.longitude)
+        else:
+            return None
+    except Exception:
+        return None
+        
 # ============================================================================
 # STYLING
 # ============================================================================
@@ -363,6 +385,32 @@ def apply_custom_styles():
             color: var(--text-secondary);
             margin-bottom: 0;
         }
+        def render_location_input():
+    """Render postcode input and display location map"""
+    st.markdown("### 🗺️ Your Charging Location")
+    
+    postcode = st.text_input(
+        "Enter your UK postcode",
+        placeholder="e.g., SW1A 1AA",
+        help="Optional: Enter your postcode to visualise nearby charging"
+    )
+    
+    if postcode:
+        coords = geocode_postcode(postcode)
+        if coords:
+            lat, lon = coords
+            st.success(f"📍 Postcode located at: {lat:.5f}, {lon:.5f}")
+            
+            # Create a Folium map centered on the postcode
+            m = folium.Map(location=[lat, lon], zoom_start=14)
+            folium.Marker([lat, lon], tooltip="Your location", icon=folium.Icon(color="blue")).add_to(m)
+            
+            st_folium(m, width=700, height=500)
+        else:
+            st.error("❌ Could not find that postcode. Please check your input.")
+
+            render_hero_section()
+render_location_input()
         
         /* Metrics */
         div[data-testid="stMetric"] {
