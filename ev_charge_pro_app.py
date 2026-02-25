@@ -281,7 +281,6 @@ st.markdown(
     <div class="hero">
       <div class="hero-content">
         <h2 style="margin:0;">Charge Cost Comparison</h2>
-        <p>Professional font, white text on dark surfaces, top banner controls, and iOS-safe input mode.</p>
       </div>
     </div>
     """,
