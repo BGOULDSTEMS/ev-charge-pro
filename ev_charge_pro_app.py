@@ -1,4 +1,3 @@
-```python
 import numpy as np
 import pandas as pd
 import requests
@@ -415,4 +414,3 @@ st.markdown(
     f'<p class="small-note">Live FX (Frankfurter/ECB): EUR→GBP {rates["GBP"]:.5f}, EUR→USD {rates["USD"]:.5f}, date {rates["_date"]}. Tariffs vary by site/time; verify before charging.</p>',
     unsafe_allow_html=True,
 )
-```
