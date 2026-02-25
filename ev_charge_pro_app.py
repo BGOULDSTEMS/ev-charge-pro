@@ -33,8 +33,9 @@ st.markdown(
       }
 
       .block-container{max-width:1280px;padding-top:.55rem;padding-bottom:1.8rem;}
-      h1,h2,h3,h4,p,span,small,strong,div,label{color:#fff !important;}
-      h1,h2,h3,h4{letter-spacing:-.01em;font-weight:700;}
+      h1,h2,h3,h4{color:#fff !important;letter-spacing:-.01em;font-weight:700;}
+      .stMarkdown p, .stMarkdown li, .stMarkdown span, .stCaption, .small-note { color:#fff !important; }
+      label, .stCheckbox label, .stRadio label, .stSelectbox label, .stNumberInput label { color:#fff !important; }
 
       div[data-testid="stSlider"], div[data-testid="stSlider"] * {
         touch-action: pan-y !important;
@@ -46,6 +47,7 @@ st.markdown(
         border-radius: 14px;
         padding: .75rem 1rem;
         margin-bottom: .8rem;
+        color:#fff;
       }
 
       .hero{
@@ -62,6 +64,7 @@ st.markdown(
       }
 
       .hero-content{padding:1.2rem 1.15rem;max-width:760px;}
+      .hero-content p{color:#fff !important;}
 
       .panel{
         background:var(--card);
@@ -72,7 +75,6 @@ st.markdown(
         backdrop-filter:blur(8px);
       }
 
-      .small-note{color:#fff !important;font-size:.9rem;}
       div[data-testid="stMetric"]{
         background: rgba(7,13,24,.94);
         border:1px solid var(--line);
@@ -82,8 +84,20 @@ st.markdown(
       div[data-testid="stMetricLabel"]{color:#fff !important;}
       .stButton > button{min-height:46px;font-weight:700;border-radius:10px;}
 
-      .stMarkdown, .stCaption, .stAlert, .st-emotion-cache-1wivap2, .st-emotion-cache-10trblm {
-        color:#fff !important;
+      /* ---- Force form controls to black text on light fields ---- */
+      [data-testid="stSelectbox"] [data-baseweb="select"] * { color:#111 !important; }
+      [data-testid="stSelectbox"] [data-baseweb="select"] { background:#fff !important; }
+
+      /* Dropdown menu options (vehicle/provider lists) */
+      div[role="listbox"] * { color:#111 !important; }
+      div[role="option"] { color:#111 !important; }
+
+      /* Number/text inputs */
+      [data-testid="stNumberInput"] input,
+      [data-testid="stTextInput"] input,
+      [data-testid="stTextArea"] textarea {
+        color:#111 !important;
+        background:#fff !important;
       }
 
       @media (max-width: 920px){
@@ -267,7 +281,7 @@ st.markdown(
     <div class="hero">
       <div class="hero-content">
         <h2 style="margin:0;">Charge Cost Comparison</h2>
-        <p>Professional font, fully white text, top banner controls, and iOS-safe input mode.</p>
+        <p>Professional font, white text on dark surfaces, top banner controls, and iOS-safe input mode.</p>
       </div>
     </div>
     """,
@@ -277,7 +291,7 @@ st.markdown(
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 st.subheader("Vehicle & Session (Top Banner Controls)")
 
-mode_col1, mode_col2 = st.columns([1.8, 4])
+mode_col1, _ = st.columns([1.8, 4])
 with mode_col1:
     ios_safe_mode = st.toggle(
         "iOS Scroll Safe Inputs",
