@@ -10,6 +10,9 @@ from typing import Dict, Tuple, Optional
 import streamlit as st
 from datetime import datetime
 
+import streamlit as st
+
+API_KEY = st.secrets["ROUTE_API_KEY"]
 
 # ============================================================================
 # CONFIGURATION & DATA
