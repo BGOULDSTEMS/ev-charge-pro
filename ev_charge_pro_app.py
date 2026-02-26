@@ -1303,7 +1303,8 @@ def render_location_and_cards_section(
 # ROUTE PLANNER MODULE (IONITY STYLE) — FIXED INTO A FUNCTION
 # ============================================================================
 
-import requests  # ensure this is imported at the top of the file
+import json
+import requests  # keep this near the top of your file with the other imports
 
 
 def geocode_place_ors(query: str, headers: Dict[str, str]) -> Tuple[float, float]:
@@ -1342,10 +1343,10 @@ def render_route_planner(
         col_r1, col_r2, col_r3 = st.columns([2, 2, 1])
 
         with col_r1:
-            start_location = st.text_input("Start Location", "Eastbourne")
+            start_location = st.text_input("Start Location", "Eastbourne, UK")
 
         with col_r2:
-            end_location = st.text_input("Destination", "Manchester")
+            end_location = st.text_input("Destination", "Manchester, UK")
 
         with col_r3:
             plan_route = st.button("Plan Route", use_container_width=True)
@@ -1365,11 +1366,6 @@ def render_route_planner(
             start_lon, start_lat = geocode_place_ors(start_location, headers)
             end_lon, end_lat = geocode_place_ors(end_location, headers)
 
-        try:
-            # 1) Geocode start & end
-            start_lon, start_lat = geocode_place_ors(start_location, headers)
-            end_lon, end_lat = geocode_place_ors(end_location, headers)
-
             # 2) Directions (JSON format with top-level 'routes')
             url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
             body = {"coordinates": [[start_lon, start_lat], [end_lon, end_lat]]}
@@ -1379,7 +1375,7 @@ def render_route_planner(
 
             if "routes" not in route or not route["routes"]:
                 st.error("Route service returned an unexpected response.")
-                st.caption(f"Raw response: {route}")
+                st.caption(f"Raw response: {json.dumps(route, indent=2)[:600]}")
                 return
 
             route0 = route["routes"][0]
@@ -1435,6 +1431,27 @@ def render_route_planner(
             ).add_to(m)
 
             st_folium(m, width=1200, height=600)
+
+        except requests.HTTPError as e:
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+
+            if e.response is not None and e.response.status_code == 400 and "2004" in body:
+                st.error(
+                    "Route is too long for this OpenRouteService plan (> 6,000 km), "
+                    "or one of the locations was geocoded outside the UK."
+                )
+                st.caption("Try more precise UK names, e.g. 'Eastbourne, UK' and 'Manchester, UK'.")
+            else:
+                st.error("Route calculation failed (HTTP error).")
+                st.caption(f"Status: {e.response.status_code if e.response else 'unknown'}, "
+                           f"Body: {body[:300]}")
+        except Exception as e:
+            st.error("Route calculation failed. Check locations or API key.")
+            st.caption(str(e)) 
             
 # ============================================================================
 # MAIN APPLICATION
