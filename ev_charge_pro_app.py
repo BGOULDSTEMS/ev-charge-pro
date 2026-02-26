@@ -1198,8 +1198,8 @@ folium.Marker(
 # Use BOTH operator and site title to infer card/tariff
 search_text = f"{operator_title or ''} {site_title or ''}"
 tariff_name = infer_tariff_from_operator(search_text)
-    best_card = None
-    best_cost = None
+best_card = None
+best_cost = None
 
         if tariff_name and energy_needed > 0:
             preset = CHARGING_PROVIDERS.get(tariff_name)
