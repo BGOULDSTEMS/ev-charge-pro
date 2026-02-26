@@ -1368,7 +1368,10 @@ def render_route_planner(
 
             # 2) Directions (JSON format with top-level 'routes')
             url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
-            body = {"coordinates": [[start_lon, start_lat], [end_lon, end_lat]]}
+            body = {
+                "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
+                "geometry_format": "geojson",  # ensure geometry is a dict, not an encoded string
+            }
             r_dir = requests.post(url_dir, headers=headers, json=body, timeout=20)
             r_dir.raise_for_status()
             route = r_dir.json()
@@ -1410,13 +1413,18 @@ def render_route_planner(
             # 3) Map rendering
             m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
-            # Wrap ORS 'geometry' into a GeoJSON Feature for folium
-            route_feature = {
-                "type": "Feature",
-                "geometry": route0["geometry"],
-                "properties": {},
-            }
-            folium.GeoJson(route_feature).add_to(m)
+            geom = route0.get("geometry")
+            if isinstance(geom, dict):
+                # Wrap ORS 'geometry' into a GeoJSON Feature for folium
+                route_feature = {
+                    "type": "Feature",
+                    "geometry": geom,
+                    "properties": {},
+                }
+                folium.GeoJson(route_feature).add_to(m)
+            else:
+                # Geometry came back in an unexpected format (e.g. encoded polyline)
+                st.caption("Route geometry was not GeoJSON; showing markers only.")
 
             folium.Marker(
                 [start_lat, start_lon],
@@ -1431,6 +1439,7 @@ def render_route_planner(
             ).add_to(m)
 
             st_folium(m, width=1200, height=600)
+            
 
         except requests.HTTPError as e:
             body = ""
