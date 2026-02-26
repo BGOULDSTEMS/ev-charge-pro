@@ -185,7 +185,9 @@ def fetch_nearby_chargers(
         "distance": distance_km,
         "distanceunit": "KM",
         "maxresults": max_results,
-        "compact": True,
+        "compact": False,               # WAS True – need False to get full info
+        "verbose": True,                # more fields
+        "includeoperatorinfo": True,    # ensure OperatorInfo is present
     }
 
     try:
