@@ -1339,6 +1339,10 @@ def render_route_planner(
     st.markdown("## 🗺 EV Route Planner")
     st.caption("Plan long journeys • Estimate charging stops • Visual route mapping")
 
+    # keep this outside the container if you like; functional either way
+    if "route_planned" not in st.session_state:
+        st.session_state["route_planned"] = False
+
     with st.container():
         col_r1, col_r2, col_r3 = st.columns([2, 2, 1])
 
@@ -1349,9 +1353,14 @@ def render_route_planner(
             end_location = st.text_input("Destination", "Manchester, UK")
 
         with col_r3:
-            plan_route = st.button("Plan Route", use_container_width=True)
+            plan_clicked = st.button("Plan Route", use_container_width=True)
 
-        if not plan_route:
+        # When the button is clicked, remember that we should show the route
+        if plan_clicked:
+            st.session_state["route_planned"] = True
+
+        # If no route has ever been planned, don't show anything yet
+        if not st.session_state["route_planned"]:
             return
 
         ORS_API_KEY = st.secrets.get("ORS_API_KEY")
@@ -1360,6 +1369,11 @@ def render_route_planner(
             return
 
         headers = {"Authorization": ORS_API_KEY}
+
+        try:
+            # ... keep your existing geocode + directions + metrics + map code here ...
+            # (everything from start_lon, start_lat = geocode_place_ors(...) downward)
+            ...
 
         try:
             # 1) Geocode start & end
