@@ -1167,38 +1167,37 @@ def render_location_and_cards_section(
 
     rows = []
 
-    for poi in pois:
-        addr = poi.get("AddressInfo", {}) or {}
-        operator = (poi.get("OperatorInfo", {}) or {}).get("Title")
-        title = addr.get("Title") or operator or "Unknown charger"
-        dist_km = addr.get("Distance")  # OCM populates this when using lat/lon+distance
-        dist_str = f"{dist_km:.1f} km" if isinstance(dist_km, (int, float)) else "—"
+addr = poi.get("AddressInfo", {}) or {}
 
-        lat_c = addr.get("Latitude")
-        lon_c = addr.get("Longitude")
+# Operator info from OpenChargeMap (requires includeoperatorinfo=True)
+op_info = poi.get("OperatorInfo") or {}
+operator_title = op_info.get("Title")
 
-        # Get an approximate max connection power from first connection
-        connections = poi.get("Connections") or []
-        power_kw = None
-        if connections:
-            power_kw = connections[0].get("PowerKW")
-        if not isinstance(power_kw, (int, float)):
-            power_kw = 50.0  # reasonable default if not supplied
+# Site name / brand from address info
+site_title = addr.get("Title")
 
-        # Limit by vehicle
-        effective_kw = min(float(power_kw), float(car_max_kw))
+# What we show to the user as "operator"
+display_operator = operator_title or site_title or "Unknown"
 
-        # Drop a marker on the map
-        popup_text = f"{title}<br>{operator or 'Unknown operator'}<br>~{dist_str}"
-        folium.Marker(
-            [lat_c, lon_c],
-            tooltip=title,
-            popup=popup_text,
-            icon=folium.Icon(color="green")
-        ).add_to(m)
+title = site_title or display_operator or "Unknown charger"
+dist_km = addr.get("Distance")
+dist_str = f"{dist_km:.1f} km" if isinstance(dist_km, (int, float)) else "—"
 
-        # Try to infer which card / tariff applies from operator name
-        tariff_name = infer_tariff_from_operator(operator)
+lat_c = addr.get("Latitude")
+lon_c = addr.get("Longitude")
+
+...
+popup_text = f"{title}<br>{display_operator}<br>~{dist_str}"
+folium.Marker(
+    [lat_c, lon_c],
+    tooltip=title,
+    popup=popup_text,
+    icon=folium.Icon(color="green")
+).add_to(m)
+
+# Use BOTH operator and site title to infer card/tariff
+search_text = f"{operator_title or ''} {site_title or ''}"
+tariff_name = infer_tariff_from_operator(search_text)
         best_card = None
         best_cost = None
 
