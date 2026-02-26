@@ -1340,17 +1340,21 @@ def render_route_planner(
             # --- 1) Geocode start & end via ORS geocoding API ---
             headers = {"Authorization": ORS_API_KEY}
 
-            def geocode_place(query: str):
-                url = "https://api.openrouteservice.org/geocode/search"
-                params = {"text": query, "size": 1}
-                r = requests.get(url, headers=headers, params=params, timeout=10)
-                r.raise_for_status()
-                data = r.json()
-                feats = data.get("features") or []
-                if not feats:
-                    raise ValueError(f"No geocode result for '{query}'")
-                coords = feats[0]["geometry"]["coordinates"]  # [lon, lat]
-                return coords
+def geocode_place(query: str):
+    url = "https://api.openrouteservice.org/geocode/search"
+    params = {
+        "text": query,
+        "size": 1,
+        "boundary.country": "GB",  # force results to Great Britain
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    feats = data.get("features") or []
+    if not feats:
+        raise ValueError(f"No geocode result for '{query}'")
+    coords = feats[0]["geometry"]["coordinates"]  # [lon, lat]
+    return coords
 
             start_geo = geocode_place(start_location)
             end_geo = geocode_place(end_location)
@@ -1413,11 +1417,20 @@ def render_route_planner(
             st_folium(m, width=1200, height=600)
 
         except requests.HTTPError as e:
-            st.error(f"Route calculation failed (HTTP error).")
-            st.caption(f"Status: {e.response.status_code}, Body: {e.response.text[:300]}")
-        except Exception as e:
-            st.error("Route calculation failed. Check locations or API key.")
-            st.caption(str(e))
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+
+            if e.response is not None and e.response.status_code == 400 and "2004" in body:
+                st.error("Route is too long for this OpenRouteService plan "
+                         "(> 6,000 km). One of the locations may have been geocoded to the wrong country.")
+                st.caption("Try specifying more precise UK place names (e.g. 'Eastbourne, UK' and 'Manchester, UK').")
+            else:
+                st.error("Route calculation failed (HTTP error).")
+                st.caption(f"Status: {e.response.status_code if e.response else 'unknown'}, "
+                           f"Body: {body[:300]}")
 # ============================================================================
 # MAIN APPLICATION
 # ============================================================================
