@@ -1676,7 +1676,14 @@ def main():
                         battery_kwh, start_pct, end_pct, efficiency_loss, miles_per_kwh,
                         apply_taper, provider_a, provider_b, comparison_currency, exchange_rates
                     )
-
+        # Route planner uses current vehicle + Provider A pricing
+        render_route_planner(
+            battery_kwh=battery_kwh,
+            miles_per_kwh=miles_per_kwh,
+            provider_a=provider_a,
+            comparison_currency=comparison_currency,
+            exchange_rates=exchange_rates,
+        )
         st.markdown("---")
         st.markdown("""
             <div style='text-align: center; color: var(--text-secondary); padding: 2rem 0;'>
