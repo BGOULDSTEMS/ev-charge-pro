@@ -127,7 +127,7 @@ CHARGING_PROVIDERS: Dict[str, Dict] = {
     },
 }
 
-# Which tariffs/cards can be used at which operators (host + roaming)
+# Operator → all tariffs/cards that can be used there (host + roaming)
 OPERATOR_TARIFFS = {
     "shell": ["Shell Recharge UK", "Electroverse", "Freshmile"],
     "bp pulse": ["BP Pulse PAYG", "Electroverse"],
@@ -137,6 +137,17 @@ OPERATOR_TARIFFS = {
     "evyve": ["EVYVE Charging Stations", "Electroverse"],
     "mfg ev power": ["MFG EV Power", "Electroverse"],
     "ionity": ["Ionity", "Electroverse", "Freshmile"],
+}
+
+DIRECT_TARIFFS: Set[str] = {
+    "MFG EV Power",
+    "EVYVE Charging Stations",
+    "Osprey Charging (App)",
+    "Osprey Charging (Contactless)",
+    "Shell Recharge UK",
+    "BP Pulse PAYG",
+    "Pod Point",
+    "Ionity",
 }
 
 OCM_API_KEY = st.secrets.get("OCM_API_KEY")
@@ -737,6 +748,7 @@ def render_location_and_cards_section(
         miles_added = energy_needed * miles_per_kwh if energy_needed > 0 else 0.0
 
     rows = []
+    operator_counts: Dict[str, int] = {}
 
     for poi in pois:
         addr = poi.get("AddressInfo", {}) or {}
@@ -744,6 +756,8 @@ def render_location_and_cards_section(
         operator_title = op_info.get("Title")
         site_title = addr.get("Title")
         operator = operator_title or "Unknown"
+
+        operator_counts[operator] = operator_counts.get(operator, 0) + 1
 
         title = site_title or operator or "Unknown charger"
         dist_km = addr.get("Distance")
@@ -805,12 +819,32 @@ def render_location_and_cards_section(
             "Approx. Power (kW)": f"{effective_kw:.0f}",
             "Cheapest Card (you own)": best_card or "N/A",
             f"Est. Session Cost ({comparison_currency})": best_cost,
+            "_op_title": operator_title,
+            "_site_title": site_title,
+            "_effective_kw": effective_kw,
+            "_lat": lat_c,
+            "_lon": lon_c,
         })
+
+    # Operator summary (like Electroverse operator view)
+    st.markdown("#### Operators in this area")
+    if operator_counts:
+        op_df = pd.DataFrame(
+            [{"Operator": k, "Chargers": v} for k, v in sorted(operator_counts.items(), key=lambda kv: -kv[1])]
+        )
+        st.dataframe(op_df, hide_index=True, use_container_width=True)
 
     map_state = st_folium(m, width=800, height=500, key="nearby_chargers_map")
 
     st.markdown("### Nearby chargers & cheapest card (your cards only)")
-    df = pd.DataFrame(rows)
+    display_cols = [
+        "Charger", "Operator", "Distance", "Approx. Power (kW)",
+        "Cheapest Card (you own)", f"Est. Session Cost ({comparison_currency})"
+    ]
+    df = pd.DataFrame([
+        {k: v for k, v in row.items() if k in display_cols}
+        for row in rows
+    ])
     cost_col = f"Est. Session Cost ({comparison_currency})"
     if cost_col in df.columns:
         def fmt_cost(x):
@@ -820,14 +854,73 @@ def render_location_and_cards_section(
         df[cost_col] = df[cost_col].apply(fmt_cost)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
+    # Clicked-charger details with multi-tariff breakdown
     clicked_popup = map_state.get("last_object_clicked_popup")
     if clicked_popup:
         charger_name = clicked_popup.split("<br>")[0]
         selected = next((row for row in rows if row["Charger"] == charger_name), None)
         if selected:
-            st.markdown("#### Selected charger details")
-            st.write(selected)
+            st.markdown("#### Selected charger tariff breakdown")
+            op_title = selected["_op_title"]
+            site_title = selected["_site_title"]
+            eff_kw = selected["_effective_kw"]
 
+            candidate_tariffs = infer_tariffs_for_operator(f"{op_title or ''} {site_title or ''}")
+            breakdown = []
+            if energy_needed > 0 and candidate_tariffs:
+                direct_cost = None
+                for tname in candidate_tariffs:
+                    if tname not in card_set:
+                        continue
+                    preset = CHARGING_PROVIDERS.get(tname)
+                    if not preset:
+                        continue
+                    t_minutes = calculate_charging_time(
+                        battery_kwh, eff_kw, start_pct, end_pct, apply_taper
+                    )
+                    native_cost = calculate_charging_cost(
+                        energy_needed,
+                        t_minutes,
+                        preset["energy"],
+                        preset["time"],
+                        0.0,
+                    )
+                    total_cost = convert_currency(
+                        native_cost,
+                        preset["currency"],
+                        comparison_currency,
+                        exchange_rates,
+                    )
+                    ttype = "Direct" if tname in DIRECT_TARIFFS else "Roaming"
+                    breakdown.append({
+                        "Card": tname,
+                        "Type": ttype,
+                        "Energy price": f"{preset['energy']:.2f} {preset['currency']}/kWh",
+                        "Time price": f"{preset['time']:.2f} {preset['currency']}/min",
+                        f"Est. session cost ({comparison_currency})": total_cost,
+                    })
+                    if ttype == "Direct":
+                        direct_cost = total_cost
+
+                if breakdown:
+                    if direct_cost is not None:
+                        for row in breakdown:
+                            cost = row[f"Est. session cost ({comparison_currency})"]
+                            saving = direct_cost - cost
+                            row["Saving vs direct"] = format_currency(saving, comparison_currency)
+                    bdf = pd.DataFrame(breakdown).sort_values(
+                        by=f"Est. session cost ({comparison_currency})"
+                    )
+                    bdf[f"Est. session cost ({comparison_currency})"] = bdf[
+                        f"Est. session cost ({comparison_currency})"
+                    ].apply(lambda x: format_currency(x, comparison_currency))
+                    st.dataframe(bdf, hide_index=True, use_container_width=True)
+                else:
+                    st.caption("No tariffs available here with the cards you selected.")
+            else:
+                st.caption("No tariffs available or zero energy needed for this session.")
+
+    # Overall card summary for this session
     if energy_needed > 0:
         st.markdown("#### Overall cheapest cards for this session (your cards only)")
         card_rows = []
