@@ -360,7 +360,7 @@ def pick_best_charger_stop(
     car_max_kw: float,
     comparison_currency: str,
     exchange_rates: Dict,
-    available_cards: Optional[set[str]] = None,
+    available_cards: Optional[set] = None,   # note: Optional[set], no extra ]
 ) -> Optional[Dict]:
     user_cards = st.multiselect(
        
