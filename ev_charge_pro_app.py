@@ -1,6 +1,6 @@
 """
 EV Charge Pro UK - Professional Edition
-A comprehensive EV charging cost comparison tool for the UK market
+A comprehensive EV charging cost and route planning tool for the UK market
 """
 
 from typing import Dict, Tuple, Optional, List, Set
@@ -151,7 +151,6 @@ def fetch_nearby_chargers(
 ) -> list:
     if not OCM_API_KEY:
         return []
-
     url = "https://api.openchargemap.io/v3/poi/"
     params = {
         "output": "json",
@@ -432,7 +431,7 @@ def render_hero_section():
         <div class="hero-section">
             <div class="hero-title">{Config.APP_ICON} EV Charge Pro UK</div>
             <div class="hero-subtitle">
-                Professional EV charging cost comparison • Compare networks & payment cards • Plan routes
+                Professional EV charging cost comparison • Optimise chargers & cards • Plan long routes
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -644,88 +643,9 @@ def render_provider_configuration(
         "session_fee": float(session_fee),
     }
 
-
-def render_results(
-    battery_kwh: float,
-    start_pct: float,
-    end_pct: float,
-    efficiency_loss: float,
-    miles_per_kwh: float,
-    apply_taper: bool,
-    provider_a: Dict,
-    provider_b: Dict,
-    comparison_currency: str,
-    rates: Dict
-):
-    energy_needed = battery_kwh * ((end_pct - start_pct) / 100.0)
-    energy_needed *= (1.0 + efficiency_loss / 100.0)
-    time_a = calculate_charging_time(
-        battery_kwh, provider_a["effective_kw"], start_pct, end_pct, apply_taper
-    )
-    time_b = calculate_charging_time(
-        battery_kwh, provider_b["effective_kw"], start_pct, end_pct, apply_taper
-    )
-    native_cost_a = calculate_charging_cost(
-        energy_needed, time_a,
-        provider_a["energy_price"], provider_a["time_price"], provider_a["session_fee"]
-    )
-    native_cost_b = calculate_charging_cost(
-        energy_needed, time_b,
-        provider_b["energy_price"], provider_b["time_price"], provider_b["session_fee"]
-    )
-    total_cost_a = convert_currency(
-        native_cost_a, provider_a["currency"], comparison_currency, rates
-    )
-    total_cost_b = convert_currency(
-        native_cost_b, provider_b["currency"], comparison_currency, rates
-    )
-    miles_added = energy_needed * miles_per_kwh
-    cost_per_100mi_a = (total_cost_a / miles_added * 100.0) if miles_added > 0 else 0.0
-    cost_per_100mi_b = (total_cost_b / miles_added * 100.0) if miles_added > 0 else 0.0
-    savings = abs(total_cost_a - total_cost_b)
-    if total_cost_a < total_cost_b:
-        winner = provider_a["provider"]
-        loser_cost = total_cost_b
-    else:
-        winner = provider_b["provider"]
-        loser_cost = total_cost_a
-    savings_pct = (savings / loser_cost * 100) if loser_cost > 0 else 0
-
-    st.markdown("---")
-    st.markdown("## 📊 Comparison Results")
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Energy Delivered", f"{energy_needed:.2f} kWh")
-    with col2:
-        st.metric("Range Added", f"{miles_added:.1f} mi")
-    with col3:
-        st.metric(provider_a["provider"][:15], format_time(time_a))
-    with col4:
-        st.metric(provider_b["provider"][:15], format_time(time_b))
-
-    st.markdown("### Cost Comparison")
-    col5, col6, col7 = st.columns(3)
-    with col5:
-        st.metric(
-            f"💰 {provider_a['provider']}",
-            format_currency(total_cost_a, comparison_currency),
-        )
-        st.caption(f"Per 100 miles: {format_currency(cost_per_100mi_a, comparison_currency)}")
-    with col6:
-        st.metric(
-            f"💰 {provider_b['provider']}",
-            format_currency(total_cost_b, comparison_currency),
-        )
-        st.caption(f"Per 100 miles: {format_currency(cost_per_100mi_b, comparison_currency)}")
-    with col7:
-        st.metric(
-            "💵 Potential Savings",
-            format_currency(savings, comparison_currency),
-            delta=f"{savings_pct:.1f}%",
-        )
-        st.markdown(f'<span class="success-badge">Choose {winner}</span>', unsafe_allow_html=True)
-
+# ============================================================================
+# NEARBY CHARGERS (MAP-FIRST, CLICKABLE)
+# ============================================================================
 
 def render_location_and_cards_section(
     battery_kwh: float,
@@ -739,26 +659,42 @@ def render_location_and_cards_section(
     exchange_rates: Dict,
     available_cards: List[str],
 ):
-    st.markdown("---")
-    st.markdown("## 🗺️ Chargers Near You & Cheapest Payment Card")
+    st.markdown("## 🗺️ Nearby chargers & cheapest payment card")
 
     card_set = set(available_cards or [])
 
-    postcode = st.text_input(
-        "Enter your UK postcode",
-        placeholder="e.g., SW1A 1AA",
-        help="We’ll centre the map on your postcode and find nearby chargers."
-    )
-    if not postcode:
+    col_loc1, col_loc2 = st.columns([2, 1])
+    with col_loc1:
+        postcode = st.text_input(
+            "Enter your UK postcode (or click the map to set location)",
+            placeholder="e.g., SW1A 1AA",
+        )
+    with col_loc2:
+        use_map_click = st.checkbox("Use map click as location", value=False)
+
+    lat = lon = None
+
+    if use_map_click and "nearby_click_coords" in st.session_state:
+        lat, lon = st.session_state["nearby_click_coords"]
+
+    if lat is None and postcode:
+        coords = geocode_postcode(postcode.strip())
+        if not coords:
+            st.error("❌ Could not find that postcode. Please check your input.")
+            return
+        lat, lon = coords
+
+    if lat is None or lon is None:
+        base_map = folium.Map(location=[54.0, -2.0], zoom_start=6)
+        base_state = st_folium(base_map, width=800, height=500, key="nearby_base_map")
+        click = base_state.get("last_clicked")
+        if click:
+            st.session_state["nearby_click_coords"] = (click["lat"], click["lng"])
+            st.experimental_rerun()
+        st.info("Click anywhere on the map to set your location, or enter a postcode above.")
         return
 
-    coords = geocode_postcode(postcode.strip())
-    if not coords:
-        st.error("❌ Could not find that postcode. Please check your input.")
-        return
-
-    lat, lon = coords
-    st.success(f"📍 Postcode located at: {lat:.5f}, {lon:.5f}")
+    st.success(f"📍 Location set at: {lat:.5f}, {lon:.5f}")
 
     m = folium.Map(location=[lat, lon], zoom_start=13)
     folium.Marker([lat, lon], tooltip="Your location", icon=folium.Icon(color="blue")).add_to(m)
@@ -766,11 +702,11 @@ def render_location_and_cards_section(
     pois = fetch_nearby_chargers(lat, lon, distance_km=10, max_results=25)
     if not pois:
         st.warning("No chargers returned from OpenChargeMap or API key missing.")
-        st_folium(m, width=800, height=500, key="nearby_chargers_map")
+        map_state = st_folium(m, width=800, height=500, key="nearby_chargers_map")
         return
 
     if end_pct <= start_pct:
-        st.info("Increase your target charge level above your current SoC to estimate costs.")
+        st.info("Increase your target SoC above your current SoC to estimate costs.")
         energy_needed = 0.0
         miles_added = 0.0
     else:
@@ -842,9 +778,9 @@ def render_location_and_cards_section(
             f"Est. Session Cost ({comparison_currency})": best_cost,
         })
 
-    st_folium(m, width=800, height=500, key="nearby_chargers_map")
+    map_state = st_folium(m, width=800, height=500, key="nearby_chargers_map")
 
-    st.markdown("### Nearby Chargers & Cheapest Known Payment Card (Your Cards Only)")
+    st.markdown("### Nearby chargers & cheapest card (your cards only)")
     df = pd.DataFrame(rows)
     cost_col = f"Est. Session Cost ({comparison_currency})"
     if cost_col in df.columns:
@@ -855,8 +791,16 @@ def render_location_and_cards_section(
         df[cost_col] = df[cost_col].apply(fmt_cost)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
+    clicked_popup = map_state.get("last_object_clicked_popup")
+    if clicked_popup:
+        charger_name = clicked_popup.split("<br>")[0]
+        selected = next((row for row in rows if row["Charger"] == charger_name), None)
+        if selected:
+            st.markdown("#### Selected charger details")
+            st.write(selected)
+
     if energy_needed > 0:
-        st.markdown("#### Overall Cheapest Cards For This Session (Any Network, Your Cards Only)")
+        st.markdown("#### Overall cheapest cards for this session (your cards only)")
         card_rows = []
         for name, preset in CHARGING_PROVIDERS.items():
             if name not in card_set:
@@ -924,9 +868,7 @@ def render_route_planner(
     exchange_rates: Dict,
     available_cards: List[str],
 ):
-    st.markdown("---")
-    st.markdown("## 🗺 EV Route Planner")
-    st.caption("Plan long journeys • Estimate charging stops • Visual route mapping")
+    st.markdown("## 🗺 EV route planner")
 
     if "route_planned" not in st.session_state:
         st.session_state["route_planned"] = False
@@ -994,7 +936,6 @@ def render_route_planner(
         col_m4.metric("Estimated Charging Cost",
                       format_currency(est_cost, comparison_currency))
 
-        # Decide stop positions along route
         stop_fractions: List[float] = []
         if required_stops == 1:
             stop_fractions = [0.5]
@@ -1035,7 +976,7 @@ def render_route_planner(
                     stop_suggestions.append(best)
 
         if stop_suggestions:
-            st.markdown("### Suggested Charging Stops (Cheapest With Your Cards)")
+            st.markdown("### Suggested charging stops (cheapest with your cards)")
             df_stops = pd.DataFrame([
                 {
                     "Stop #": i + 1,
@@ -1052,7 +993,6 @@ def render_route_planner(
 
         m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
-        # route line
         try:
             route_geom = None
             if isinstance(geom, dict):
@@ -1084,12 +1024,35 @@ def render_route_planner(
             folium.Marker(
                 [s["lat"], s["lon"]],
                 tooltip=f"Stop {i+1}: {s['charger_name']}",
-                popup=f"{s['operator']}<br>Best card: {s['card']}<br>"
+                popup=f"Stop {i+1}: {s['charger_name']}<br>"
+                      f"{s['operator']}<br>"
+                      f"Best card: {s['card']}<br>"
                       f"Est. cost: {format_currency(s['total_cost'], comparison_currency)}",
                 icon=folium.Icon(color="orange"),
             ).add_to(m)
 
-        st_folium(m, width=1200, height=600, key="route_planner_map")
+        map_state = st_folium(m, width=1200, height=600, key="route_planner_map")
+
+        clicked_popup = map_state.get("last_object_clicked_popup")
+        if clicked_popup and stop_suggestions:
+            first_line = clicked_popup.split("<br>")[0]
+            try:
+                label = first_line.split(":")[0].strip()   # "Stop X"
+                idx = int(label.split()[1]) - 1
+                if 0 <= idx < len(stop_suggestions):
+                    sel = stop_suggestions[idx]
+                    st.markdown("#### Selected stop details")
+                    st.write({
+                        "Stop #": idx + 1,
+                        "Charger": sel["charger_name"],
+                        "Operator": sel["operator"],
+                        "Power (kW)": f"{sel['power_kw']:.0f}",
+                        "Best Card": sel["card"],
+                        f"Est. Cost ({comparison_currency})": format_currency(sel["total_cost"], comparison_currency),
+                        "Charging Time": format_time(sel["time_min"]),
+                    })
+            except Exception:
+                pass
 
     except requests.HTTPError as e:
         body = ""
@@ -1112,6 +1075,89 @@ def render_route_planner(
         st.caption(str(e))
 
 # ============================================================================
+# PROVIDER COMPARISON
+# ============================================================================
+
+def render_results(
+    battery_kwh: float,
+    start_pct: float,
+    end_pct: float,
+    efficiency_loss: float,
+    miles_per_kwh: float,
+    apply_taper: bool,
+    provider_a: Dict,
+    provider_b: Dict,
+    comparison_currency: str,
+    rates: Dict
+):
+    energy_needed = battery_kwh * ((end_pct - start_pct) / 100.0)
+    energy_needed *= (1.0 + efficiency_loss / 100.0)
+    time_a = calculate_charging_time(
+        battery_kwh, provider_a["effective_kw"], start_pct, end_pct, apply_taper
+    )
+    time_b = calculate_charging_time(
+        battery_kwh, provider_b["effective_kw"], start_pct, end_pct, apply_taper
+    )
+    native_cost_a = calculate_charging_cost(
+        energy_needed, time_a,
+        provider_a["energy_price"], provider_a["time_price"], provider_a["session_fee"]
+    )
+    native_cost_b = calculate_charging_cost(
+        energy_needed, time_b,
+        provider_b["energy_price"], provider_b["time_price"], provider_b["session_fee"]
+    )
+    total_cost_a = convert_currency(
+        native_cost_a, provider_a["currency"], comparison_currency, rates
+    )
+    total_cost_b = convert_currency(
+        native_cost_b, provider_b["currency"], comparison_currency, rates
+    )
+    miles_added = energy_needed * miles_per_kwh
+    cost_per_100mi_a = (total_cost_a / miles_added * 100.0) if miles_added > 0 else 0.0
+    cost_per_100mi_b = (total_cost_b / miles_added * 100.0) if miles_added > 0 else 0.0
+    savings = abs(total_cost_a - total_cost_b)
+    if total_cost_a < total_cost_b:
+        winner = provider_a["provider"]
+        loser_cost = total_cost_b
+    else:
+        winner = provider_b["provider"]
+        loser_cost = total_cost_a
+    savings_pct = (savings / loser_cost * 100) if loser_cost > 0 else 0
+
+    st.markdown("### 📊 Comparison results")
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Energy delivered", f"{energy_needed:.2f} kWh")
+    with col2:
+        st.metric("Range added", f"{miles_added:.1f} mi")
+    with col3:
+        st.metric(provider_a["provider"][:15], format_time(time_a))
+    with col4:
+        st.metric(provider_b["provider"][:15], format_time(time_b))
+
+    col5, col6, col7 = st.columns(3)
+    with col5:
+        st.metric(
+            f"💰 {provider_a['provider']}",
+            format_currency(total_cost_a, comparison_currency),
+        )
+        st.caption(f"Per 100 miles: {format_currency(cost_per_100mi_a, comparison_currency)}")
+    with col6:
+        st.metric(
+            f"💰 {provider_b['provider']}",
+            format_currency(total_cost_b, comparison_currency),
+        )
+        st.caption(f"Per 100 miles: {format_currency(cost_per_100mi_b, comparison_currency)}")
+    with col7:
+        st.metric(
+            "💵 Potential savings",
+            format_currency(savings, comparison_currency),
+            delta=f"{savings_pct:.1f}%",
+        )
+        st.markdown(f'<span class="success-badge">Choose {winner}</span>', unsafe_allow_html=True)
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -1128,7 +1174,7 @@ def main():
     render_hero_section()
 
     ios_safe_mode = st.toggle(
-        "📱 iOS-Friendly Inputs",
+        "📱 iOS-friendly inputs",
         value=True,
         help="Use number inputs instead of sliders to prevent accidental changes while scrolling"
     )
@@ -1142,7 +1188,7 @@ def main():
     start_pct, end_pct, efficiency_loss, apply_taper, miles_per_kwh = render_charging_session_config(ios_safe_mode)
 
     comparison_currency = st.selectbox(
-        "💵 Display Results In",
+        "💵 Display results in",
         ["GBP", "EUR", "USD"],
         index=0,
     )
@@ -1156,44 +1202,64 @@ def main():
         help="We’ll only recommend chargers compatible with these cards."
     )
 
-    render_location_and_cards_section(
-        battery_kwh=battery_kwh,
-        start_pct=start_pct,
-        end_pct=end_pct,
-        efficiency_loss=efficiency_loss,
-        miles_per_kwh=miles_per_kwh,
-        apply_taper=apply_taper,
-        car_max_kw=car_max_kw,
-        comparison_currency=comparison_currency,
-        exchange_rates=exchange_rates,
-        available_cards=user_cards,
-    )
-
     st.markdown("---")
-    st.markdown("## 🔌 Charging Provider Comparison")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        provider_a = render_provider_configuration("Provider A", "provider_a", car_max_kw, ios_safe_mode)
-    with col_b:
-        provider_b = render_provider_configuration("Provider B", "provider_b", car_max_kw, ios_safe_mode)
-
-    if st.button("🔍 Compare Providers", type="primary", use_container_width=True):
-        if end_pct <= start_pct:
-            st.error("❌ Target charge level must be greater than current charge level")
-        else:
-            render_results(
-                battery_kwh, start_pct, end_pct, efficiency_loss, miles_per_kwh,
-                apply_taper, provider_a, provider_b, comparison_currency, exchange_rates
-            )
-
-    render_route_planner(
-        battery_kwh=battery_kwh,
-        miles_per_kwh=miles_per_kwh,
-        provider_a=provider_a,
-        comparison_currency=comparison_currency,
-        exchange_rates=exchange_rates,
-        available_cards=user_cards,
+    nearby_tab, route_tab, compare_tab = st.tabs(
+        ["Nearby chargers", "Route planner", "Provider comparison"]
     )
+
+    with nearby_tab:
+        render_location_and_cards_section(
+            battery_kwh=battery_kwh,
+            start_pct=start_pct,
+            end_pct=end_pct,
+            efficiency_loss=efficiency_loss,
+            miles_per_kwh=miles_per_kwh,
+            apply_taper=apply_taper,
+            car_max_kw=car_max_kw,
+            comparison_currency=comparison_currency,
+            exchange_rates=exchange_rates,
+            available_cards=user_cards,
+        )
+
+    with route_tab:
+        # fallback provider if compare tab hasn’t been used yet
+        fallback_provider = {
+            "provider": list(CHARGING_PROVIDERS.keys())[0],
+            "currency": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["currency"],
+            "station_kw": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["default_kw"],
+            "effective_kw": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["default_kw"],
+            "energy_price": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["energy"],
+            "time_price": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["time"],
+            "session_fee": 0.0,
+        }
+        provider_for_route = st.session_state.get("provider_a_for_route", fallback_provider)
+        render_route_planner(
+            battery_kwh=battery_kwh,
+            miles_per_kwh=miles_per_kwh,
+            provider_a=provider_for_route,
+            comparison_currency=comparison_currency,
+            exchange_rates=exchange_rates,
+            available_cards=user_cards,
+        )
+
+    with compare_tab:
+        st.markdown("## 🔌 Charging provider comparison")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            provider_a = render_provider_configuration("Provider A", "provider_a", car_max_kw, ios_safe_mode)
+        with col_b:
+            provider_b = render_provider_configuration("Provider B", "provider_b", car_max_kw, ios_safe_mode)
+
+        if st.button("🔍 Compare providers", type="primary", use_container_width=True, key="compare_button"):
+            if end_pct <= start_pct:
+                st.error("❌ Target charge level must be greater than current charge level")
+            else:
+                render_results(
+                    battery_kwh, start_pct, end_pct, efficiency_loss, miles_per_kwh,
+                    apply_taper, provider_a, provider_b, comparison_currency, exchange_rates
+                )
+            # store provider_a to reuse in route planner as default tariff
+            st.session_state["provider_a_for_route"] = provider_a
 
     st.markdown("---")
     st.markdown("""
