@@ -1237,7 +1237,7 @@ def render_location_and_cards_section(
         })
 
     # Render map
-    st_folium(m, width=800, height=500)
+    st_folium(m, width=800, height=500, key="nearby_chargers_map")
 
     # Table of nearby chargers + cheapest card
     st.markdown("### Nearby Chargers & Cheapest Known Payment Card")
@@ -1450,7 +1450,7 @@ def render_route_planner(
                 icon=folium.Icon(color="red")
             ).add_to(m)
 
-            st_folium(m, width=1200, height=600)
+            st_folium(m, width=1200, height=600, key="route_planner_map")
 
         except requests.HTTPError as e:
             body = ""
