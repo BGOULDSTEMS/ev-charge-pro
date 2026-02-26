@@ -1372,6 +1372,12 @@ def render_route_planner(
             r_dir.raise_for_status()
             route = r_dir.json()
 
+            # Defensive: make sure we actually have a route
+            if "features" not in route or not route["features"]:
+                st.error("Route service returned an unexpected response.")
+                st.caption(f"Raw response: {json.dumps(route, indent=2)[:600]}")
+                return
+
             summary = route["features"][0]["properties"]["summary"]
             distance_km = summary["distance"] / 1000
             duration_min = summary["duration"] / 60
