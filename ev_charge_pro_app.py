@@ -1366,12 +1366,9 @@ def render_route_planner(
             start_lon, start_lat = geocode_place_ors(start_location, headers)
             end_lon, end_lat = geocode_place_ors(end_location, headers)
 
-            # 2) Directions (JSON format with top-level 'routes')
+            # 2) Directions (standard ORS JSON with encoded geometry)
             url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
-            body = {
-                "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
-                "geometry_format": "geojson",  # ensure geometry is a dict, not an encoded string
-            }
+            body = {"coordinates": [[start_lon, start_lat], [end_lon, end_lat]]}
             r_dir = requests.post(url_dir, headers=headers, json=body, timeout=20)
             r_dir.raise_for_status()
             route = r_dir.json()
@@ -1414,17 +1411,32 @@ def render_route_planner(
             m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
             geom = route0.get("geometry")
-            if isinstance(geom, dict):
-                # Wrap ORS 'geometry' into a GeoJSON Feature for folium
-                route_feature = {
-                    "type": "Feature",
-                    "geometry": geom,
-                    "properties": {},
-                }
-                folium.GeoJson(route_feature).add_to(m)
-            else:
-                # Geometry came back in an unexpected format (e.g. encoded polyline)
-                st.caption("Route geometry was not GeoJSON; showing markers only.")
+
+            try:
+                if isinstance(geom, dict):
+                    # Already GeoJSON
+                    route_geom = geom
+                elif isinstance(geom, str):
+                    # Encoded polyline from ORS -> decode to GeoJSON LineString
+                    decoded = convert.decode_polyline(geom)
+                    route_geom = {
+                        "type": "LineString",
+                        "coordinates": decoded["coordinates"],
+                    }
+                else:
+                    route_geom = None
+
+                if route_geom is not None:
+                    route_feature = {
+                        "type": "Feature",
+                        "geometry": route_geom,
+                        "properties": {},
+                    }
+                    folium.GeoJson(route_feature).add_to(m)
+                else:
+                    st.caption("Route geometry was not usable; showing markers only.")
+            except Exception:
+                st.caption("Failed to decode route geometry; showing markers only.")
 
             folium.Marker(
                 [start_lat, start_lon],
@@ -1439,8 +1451,8 @@ def render_route_planner(
             ).add_to(m)
 
             st_folium(m, width=1200, height=600)
-            
 
+    
         except requests.HTTPError as e:
             body = ""
             try:
