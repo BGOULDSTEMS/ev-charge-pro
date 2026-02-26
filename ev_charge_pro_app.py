@@ -8,6 +8,7 @@ from typing import Dict, Tuple, Optional
 import numpy as np
 import pandas as pd
 import requests
+import json
 import streamlit as st
 from datetime import datetime
 from geopy.geocoders import Nominatim
@@ -1301,6 +1302,9 @@ def render_location_and_cards_section(
 # ROUTE PLANNER MODULE (IONITY STYLE) — FIXED INTO A FUNCTION
 # ============================================================================
 
+import json
+import requests  # make sure this import is at the top of your file
+
 def render_route_planner(
     battery_kwh: float,
     miles_per_kwh: float,
@@ -1327,26 +1331,41 @@ def render_route_planner(
         if not plan_route:
             return
 
-        ORS_API_KEY = st.secrets.get("ORS_API_KEY", None)
-
+        ORS_API_KEY = st.secrets.get("ORS_API_KEY")
         if not ORS_API_KEY:
             st.error("Missing OpenRouteService API key. Add ORS_API_KEY to Streamlit secrets.")
             return
 
         try:
-            client = openrouteservice.Client(key=ORS_API_KEY)
+            # --- 1) Geocode start & end via ORS geocoding API ---
+            headers = {"Authorization": ORS_API_KEY}
 
-            start_geo = client.pelias_search(text=start_location)["features"][0]["geometry"]["coordinates"]
-            end_geo = client.pelias_search(text=end_location)["features"][0]["geometry"]["coordinates"]
+            def geocode_place(query: str):
+                url = "https://api.openrouteservice.org/geocode/search"
+                params = {"text": query, "size": 1}
+                r = requests.get(url, headers=headers, params=params, timeout=10)
+                r.raise_for_status()
+                data = r.json()
+                feats = data.get("features") or []
+                if not feats:
+                    raise ValueError(f"No geocode result for '{query}'")
+                coords = feats[0]["geometry"]["coordinates"]  # [lon, lat]
+                return coords
 
-            route = client.directions(
-                coordinates=[start_geo, end_geo],
-                profile="driving-car",
-                format="geojson"
-            )
+            start_geo = geocode_place(start_location)
+            end_geo = geocode_place(end_location)
 
-            distance_km = route["features"][0]["properties"]["summary"]["distance"] / 1000
-            duration_min = route["features"][0]["properties"]["summary"]["duration"] / 60
+            # --- 2) Directions via ORS directions API ---
+            url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
+            body = {"coordinates": [start_geo, end_geo]}
+            r_dir = requests.post(url_dir, headers=headers, json=body, timeout=20)
+            r_dir.raise_for_status()
+            route = r_dir.json()
+
+            # Summary
+            summary = route["features"][0]["properties"]["summary"]
+            distance_km = summary["distance"] / 1000
+            duration_min = summary["duration"] / 60
             distance_miles = distance_km * 0.621371
 
             usable_battery = battery_kwh * 0.70  # 10–80% window
@@ -1372,28 +1391,33 @@ def render_route_planner(
             col_m4.metric("Estimated Charging Cost",
                           format_currency(est_cost, comparison_currency))
 
-            m = folium.Map(location=[start_geo[1], start_geo[0]], zoom_start=6)
+            # --- 3) Map rendering with folium ---
+            start_lat, start_lon = start_geo[1], start_geo[0]
+            m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
             folium.GeoJson(route).add_to(m)
 
             folium.Marker(
-                [start_geo[1], start_geo[0]],
+                [start_lat, start_lon],
                 tooltip="Start",
                 icon=folium.Icon(color="green")
             ).add_to(m)
 
+            end_lat, end_lon = end_geo[1], end_geo[0]
             folium.Marker(
-                [end_geo[1], end_geo[0]],
+                [end_lat, end_lon],
                 tooltip="Destination",
                 icon=folium.Icon(color="red")
             ).add_to(m)
 
             st_folium(m, width=1200, height=600)
 
-        except Exception:
+        except requests.HTTPError as e:
+            st.error(f"Route calculation failed (HTTP error).")
+            st.caption(f"Status: {e.response.status_code}, Body: {e.response.text[:300]}")
+        except Exception as e:
             st.error("Route calculation failed. Check locations or API key.")
-
-
+            st.caption(str(e))
 # ============================================================================
 # MAIN APPLICATION
 # ============================================================================
