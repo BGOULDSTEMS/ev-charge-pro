@@ -360,6 +360,16 @@ def pick_best_charger_stop(
     car_max_kw: float,
     comparison_currency: str,
     exchange_rates: Dict,
+    available_cards: Optional[set[str]] = None,
+) -> Optional[Dict]:
+    user_cards = st.multiselect(
+       
+        "💳 Payment options you have",
+        options=all_cards,
+        default=default_cards,
+        help="We’ll only recommend chargers compatible with these cards."
+        )
+    exchange_rates: Dict,
 ) -> Optional[Dict]:
     """
     For a given route point, look up nearby chargers and pick the cheapest
@@ -393,11 +403,15 @@ def pick_best_charger_stop(
             power_kw = 50.0
         effective_kw = min(float(power_kw), float(car_max_kw))
 
-        search_text = f"{operator_title or ''} {site_title or ''}"
+                search_text = f"{operator_title or ''} {site_title or ''}"
         tariff_name = infer_tariff_from_operator(search_text)
         if not tariff_name:
             continue
 
+        # NEW: skip tariffs you don't have
+        if available_cards is not None and tariff_name not in available_cards:
+            continue
+        
         preset = CHARGING_PROVIDERS.get(tariff_name)
         if not preset:
             continue
@@ -1204,6 +1218,7 @@ def render_location_and_cards_section(
     car_max_kw: float,
     comparison_currency: str,
     exchange_rates: Dict,
+    available_cards: list[str],
 ):
     st.markdown("---")
     st.markdown("## 🗺️ Chargers Near You & Cheapest Payment Card")
@@ -1251,6 +1266,8 @@ def render_location_and_cards_section(
         energy_needed *= (1.0 + efficiency_loss / 100.0)
         miles_added = energy_needed * miles_per_kwh if energy_needed > 0 else 0.0
 
+    card_set = set(available_cards or [])
+    
     rows = []
 
     for poi in pois:
@@ -1288,13 +1305,28 @@ def render_location_and_cards_section(
         best_card = None
         best_cost = None
 
-        if tariff_name and energy_needed > 0:
+        if tariff_name and energy_needed > 0 and tariff_name in card_set:
             preset = CHARGING_PROVIDERS.get(tariff_name)
             if preset:
-                # Use your existing model
                 time_min = calculate_charging_time(
                     battery_kwh, effective_kw, start_pct, end_pct, apply_taper
                 )
+                native_cost = calculate_charging_cost(
+                    energy_needed,
+                    time_min,
+                    preset["energy"],
+                    preset["time"],
+                    0.0,
+                )
+                total_cost = convert_currency(
+                    native_cost,
+                    preset["currency"],
+                    comparison_currency,
+                    exchange_rates,
+                )
+                best_card = tariff_name
+                best_cost = total_cost
+                
                 native_cost = calculate_charging_cost(
                     energy_needed,
                     time_min,
@@ -1344,6 +1376,9 @@ def render_location_and_cards_section(
         st.markdown("#### Overall Cheapest Cards For This Session (Any Network)")
         card_rows = []
         for name, preset in CHARGING_PROVIDERS.items():
+            if name not in card_set:
+                continue
+                
             station_kw = min(preset.get("default_kw", 50), car_max_kw)
             time_min = calculate_charging_time(
                 battery_kwh, station_kw, start_pct, end_pct, apply_taper
@@ -1414,7 +1449,8 @@ def render_route_planner(
     provider_a: Dict,
     comparison_currency: str,
     exchange_rates: Dict,
-):
+    available_cards=user_cards,          
+        )
     st.markdown("---")
     st.markdown("## 🗺 EV Route Planner")
     st.caption("Plan long journeys • Estimate charging stops • Visual route mapping")
@@ -1526,19 +1562,20 @@ def render_route_planner(
                     idx = max(0, min(n, idx))
                     lon_s, lat_s = coords[idx]
 
-                    best = pick_best_charger_stop(
-                        lon_s,
-                        lat_s,
-                        battery_kwh=battery_kwh,
-                        miles_per_kwh=miles_per_kwh,
-                        start_soc=10.0,   # arrive nearly empty
-                        end_soc=80.0,     # charge back to 80%
-                        efficiency_loss=6.0,
-                        apply_taper=True,
-                        car_max_kw=provider_a["station_kw"],
-                        comparison_currency=comparison_currency,
-                        exchange_rates=exchange_rates,
-                    )
+            best = pick_best_charger_stop(
+                    lon_s,
+                    lat_s,
+                    battery_kwh=battery_kwh,
+                    miles_per_kwh=miles_per_kwh,
+                    start_soc=10.0,   # arrive nearly empty
+                    end_soc=80.0,     # charge back to 80%
+                    efficiency_loss=6.0,
+                    apply_taper=True,
+                    car_max_kw=provider_a["station_kw"],
+                    comparison_currency=comparison_currency,
+                    exchange_rates=exchange_rates,
+                    available_cards=set(available_cards),
+            )
                     if best:
                         stop_suggestions.append(best)
                         # 3b) Show suggested stops
@@ -1795,23 +1832,30 @@ def main():
             help="All costs will be converted to this currency for comparison"
         )
 
-        # NEW: postcode + cheapest card map section
-        render_location_and_cards_section(
-            battery_kwh=battery_kwh,
-            start_pct=start_pct,
-            end_pct=end_pct,
-            efficiency_loss=efficiency_loss,
-            miles_per_kwh=miles_per_kwh,
-            apply_taper=apply_taper,
-            car_max_kw=car_max_kw,
-            comparison_currency=comparison_currency,
-            exchange_rates=exchange_rates,
-        )
+def render_location_and_cards_section(
+    battery_kwh: float,
+    start_pct: float,
+    end_pct: float,
+    efficiency_loss: float,
+    miles_per_kwh: float,
+    apply_taper: bool,
+    car_max_kw: float,
+    comparison_currency: str,
+    exchange_rates: Dict,
+    available_cards: list[str],   # <--- new param
+):
+    st.markdown("---")
+    st.markdown("## 🗺️ Chargers Near You & Cheapest Payment Card")
 
-        st.markdown("---")
-        st.markdown("## 🔌 Charging Provider Comparison")
-        st.caption("Configure two providers to compare costs, charging times, and savings")
+    # convert list to set once for fast lookups
+    card_set = set(available_cards or [])
 
+    postcode = st.text_input(
+        "Enter your UK postcode",
+        placeholder="e.g., SW1A 1AA",
+        help="We’ll centre the map on your postcode and find nearby chargers."
+    )
+    ...
         col_a, col_b = st.columns(2)
 
         with col_a:
