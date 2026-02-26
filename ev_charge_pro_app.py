@@ -7,13 +7,14 @@ from typing import Dict, Tuple, Optional
 
 import numpy as np
 import pandas as pd
-import requests
-import json
 import streamlit as st
 from datetime import datetime
 from geopy.geocoders import Nominatim
 import folium
 from streamlit_folium import st_folium
+
+import json
+import requests
 
 import openrouteservice
 from openrouteservice import convert
