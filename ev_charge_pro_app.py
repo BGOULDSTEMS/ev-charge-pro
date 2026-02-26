@@ -54,6 +54,7 @@ VEHICLE_DATABASE = pd.DataFrame([
 ])
 
 CHARGING_PROVIDERS: Dict[str, Dict] = {
+    # UK / roaming
     "MFG EV Power": {
         "energy": 0.79, "time": 0.00, "currency": "GBP", "default_kw": 150,
         "type": "public", "category": "Rapid", "network": "Regional"
@@ -68,6 +69,10 @@ CHARGING_PROVIDERS: Dict[str, Dict] = {
     },
     "Osprey Charging (Contactless)": {
         "energy": 0.87, "time": 0.00, "currency": "GBP", "default_kw": 150,
+        "type": "public", "category": "Rapid", "network": "National"
+    },
+    "Shell Recharge UK": {
+        "energy": 0.79, "time": 0.00, "currency": "GBP", "default_kw": 150,
         "type": "public", "category": "Rapid", "network": "National"
     },
     "Electroverse": {
@@ -90,6 +95,7 @@ CHARGING_PROVIDERS: Dict[str, Dict] = {
         "energy": 0.69, "time": 0.00, "currency": "GBP", "default_kw": 75,
         "type": "public", "category": "Fast", "network": "National"
     },
+    # European / roaming
     "IZIVIA Pass": {
         "energy": 0.75, "time": 0.00, "currency": "EUR", "default_kw": 150,
         "type": "public", "category": "Rapid", "network": "European"
@@ -102,6 +108,11 @@ CHARGING_PROVIDERS: Dict[str, Dict] = {
         "energy": 0.25, "time": 0.05, "currency": "EUR", "default_kw": 50,
         "type": "public", "category": "Fast", "network": "European"
     },
+    "Ionity": {
+        "energy": 0.69, "time": 0.00, "currency": "EUR", "default_kw": 350,
+        "type": "public", "category": "Ultra-rapid", "network": "European"
+    },
+    # Home
     "Home - Octopus Intelligent": {
         "energy": 0.08, "time": 0.00, "currency": "GBP", "default_kw": 7,
         "type": "home", "category": "Home", "network": "Domestic"
@@ -116,30 +127,40 @@ CHARGING_PROVIDERS: Dict[str, Dict] = {
     },
 }
 
-OCM_API_KEY = st.secrets.get("OCM_API_KEY")
-
-NETWORK_TARIFF_MAP = {
-    "bp pulse": "BP Pulse PAYG",
-    "bp pulse payg": "BP Pulse PAYG",
-    "osprey": "Osprey Charging (App)",
-    "mfg ev power": "MFG EV Power",
-    "motor fuel group": "MFG EV Power",
-    "pod point": "Pod Point",
-    "evyve": "EVYVE Charging Stations",
+# Which tariffs/cards can be used at which operators (host + roaming)
+OPERATOR_TARIFFS = {
+    "shell": ["Shell Recharge UK", "Electroverse", "Freshmile"],
+    "bp pulse": ["BP Pulse PAYG", "Electroverse"],
+    "bp pulse payg": ["BP Pulse PAYG", "Electroverse"],
+    "osprey": ["Osprey Charging (App)", "Electroverse"],
+    "pod point": ["Pod Point", "Electroverse"],
+    "evyve": ["EVYVE Charging Stations", "Electroverse"],
+    "mfg ev power": ["MFG EV Power", "Electroverse"],
+    "ionity": ["Ionity", "Electroverse", "Freshmile"],
 }
+
+OCM_API_KEY = st.secrets.get("OCM_API_KEY")
 
 # ============================================================================
 # HELPERS
 # ============================================================================
 
-def infer_tariff_from_operator(text: Optional[str]) -> Optional[str]:
+def infer_tariffs_for_operator(text: Optional[str]) -> List[str]:
+    """Return all candidate tariffs/cards that can be used at this operator."""
     if not text:
-        return None
+        return []
     t = text.lower()
-    for needle, tariff in NETWORK_TARIFF_MAP.items():
+    candidates: List[str] = []
+    for needle, tariffs in OPERATOR_TARIFFS.items():
         if needle in t:
-            return tariff
-    return None
+            candidates.extend(tariffs)
+    seen: Set[str] = set()
+    result: List[str] = []
+    for name in candidates:
+        if name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
@@ -325,44 +346,45 @@ def pick_best_charger_stop(
         effective_kw = min(float(power_kw), float(car_max_kw))
 
         search_text = f"{operator_title or ''} {site_title or ''}"
-        tariff_name = infer_tariff_from_operator(search_text)
-        if not tariff_name:
-            continue
-        if available_cards and tariff_name not in available_cards:
-            continue
-
-        preset = CHARGING_PROVIDERS.get(tariff_name)
-        if not preset:
+        candidate_tariffs = infer_tariffs_for_operator(search_text)
+        if available_cards:
+            candidate_tariffs = [t for t in candidate_tariffs if t in available_cards]
+        if not candidate_tariffs:
             continue
 
-        time_min = calculate_charging_time(
-            battery_kwh, effective_kw, start_soc, end_soc, apply_taper
-        )
-        native_cost = calculate_charging_cost(
-            energy_needed,
-            time_min,
-            preset["energy"],
-            preset["time"],
-            0.0,
-        )
-        total_cost = convert_currency(
-            native_cost,
-            preset["currency"],
-            comparison_currency,
-            exchange_rates,
-        )
+        for tariff_name in candidate_tariffs:
+            preset = CHARGING_PROVIDERS.get(tariff_name)
+            if not preset:
+                continue
 
-        if best is None or total_cost < best["total_cost"]:
-            best = {
-                "charger_name": site_title or display_operator,
-                "operator": display_operator,
-                "lat": lat_c,
-                "lon": lon_c,
-                "power_kw": effective_kw,
-                "card": tariff_name,
-                "total_cost": total_cost,
-                "time_min": time_min,
-            }
+            time_min = calculate_charging_time(
+                battery_kwh, effective_kw, start_soc, end_soc, apply_taper
+            )
+            native_cost = calculate_charging_cost(
+                energy_needed,
+                time_min,
+                preset["energy"],
+                preset["time"],
+                0.0,
+            )
+            total_cost = convert_currency(
+                native_cost,
+                preset["currency"],
+                comparison_currency,
+                exchange_rates,
+            )
+
+            if best is None or total_cost < best["total_cost"]:
+                best = {
+                    "charger_name": site_title or display_operator,
+                    "operator": display_operator,
+                    "lat": lat_c,
+                    "lon": lon_c,
+                    "power_kw": effective_kw,
+                    "card": tariff_name,
+                    "total_cost": total_cost,
+                    "time_min": time_min,
+                }
 
     return best
 
@@ -438,12 +460,12 @@ def render_hero_section():
 
 
 def render_vehicle_selector(ios_safe_mode: bool) -> Tuple[float, float]:
-    st.markdown("### 🚗 Vehicle Configuration")
+    st.markdown("### 🚗 Vehicle configuration")
     col1, col2 = st.columns([2, 1])
 
     with col1:
         vehicle_name = st.selectbox(
-            "Select Your Vehicle",
+            "Select your vehicle",
             VEHICLE_DATABASE["model"].tolist(),
             index=7,
         )
@@ -459,26 +481,26 @@ def render_vehicle_selector(ios_safe_mode: bool) -> Tuple[float, float]:
     with col3:
         if vehicle_name == "Custom Vehicle":
             battery_kwh = st.number_input(
-                "Battery Capacity (kWh)", 10.0, 220.0, 80.0, 1.0
+                "Battery capacity (kWh)", 10.0, 220.0, 80.0, 1.0
             )
         else:
             battery_kwh = st.number_input(
-                "Battery Capacity (kWh)", 10.0, 220.0, default_battery, 0.1
+                "Battery capacity (kWh)", 10.0, 220.0, default_battery, 0.1
             )
     with col4:
         if ios_safe_mode:
             car_max_kw = st.number_input(
-                "Max DC Charging (kW)", 20, 400, int(default_max_kw), 5
+                "Max DC charging (kW)", 20, 400, int(default_max_kw), 5
             )
         else:
             car_max_kw = st.slider(
-                "Max DC Charging (kW)", 20, 400, int(default_max_kw), 5
+                "Max DC charging (kW)", 20, 400, int(default_max_kw), 5
             )
     return float(battery_kwh), float(car_max_kw)
 
 
 def render_charging_session_config(ios_safe_mode: bool):
-    st.markdown("### ⚡ Charging Session Parameters")
+    st.markdown("### ⚡ Charging session parameters")
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -496,16 +518,16 @@ def render_charging_session_config(ios_safe_mode: bool):
     with col3:
         if ios_safe_mode:
             efficiency_loss = st.number_input(
-                "Charging Loss (%)", 0, 20, Config.DEFAULT_EFFICIENCY_LOSS, 1
+                "Charging loss (%)", 0, 20, Config.DEFAULT_EFFICIENCY_LOSS, 1
             )
         else:
             efficiency_loss = st.slider(
-                "Charging Loss (%)", 0, 20, Config.DEFAULT_EFFICIENCY_LOSS, 1
+                "Charging loss (%)", 0, 20, Config.DEFAULT_EFFICIENCY_LOSS, 1
             )
 
     col4, col5 = st.columns(2)
     with col4:
-        apply_taper = st.checkbox("Apply Charging Curve Taper", True)
+        apply_taper = st.checkbox("Apply charging curve taper", True)
     with col5:
         miles_per_kwh = st.number_input(
             "Efficiency (mi/kWh)", 1.0, 7.0, Config.DEFAULT_MILES_PER_KWH, 0.1
@@ -526,7 +548,7 @@ def render_provider_configuration(
 
     with col1:
         provider_name = st.selectbox(
-            f"{label} - Select Provider",
+            f"{label} - select provider",
             provider_list,
             key=f"{key_prefix}_name",
         )
@@ -539,7 +561,7 @@ def render_provider_configuration(
             st.caption(f"Network: {net}")
 
     currency = st.selectbox(
-        f"{label} - Currency",
+        f"{label} - currency",
         ["GBP", "EUR", "USD"],
         index=["GBP", "EUR", "USD"].index(preset["currency"])
         if preset["currency"] in ["GBP", "EUR", "USD"] else 0,
@@ -548,13 +570,13 @@ def render_provider_configuration(
 
     if ios_safe_mode:
         station_kw = st.number_input(
-            f"{label} - Charger Power (kW)",
+            f"{label} - charger power (kW)",
             3, 400, min(400, int(preset["default_kw"])), 5,
             key=f"{key_prefix}_kw",
         )
     else:
         station_kw = st.slider(
-            f"{label} - Charger Power (kW)",
+            f"{label} - charger power (kW)",
             3, 400, min(400, int(preset["default_kw"])), 1,
             key=f"{key_prefix}_kw",
         )
@@ -562,13 +584,13 @@ def render_provider_configuration(
     if preset["type"] == "home":
         if ios_safe_mode:
             home_pence = st.number_input(
-                f"{label} - Tariff Rate (p/kWh)",
+                f"{label} - tariff (p/kWh)",
                 5, 50, max(5, min(50, int(round(preset["energy"] * 100)))), 1,
                 key=f"{key_prefix}_home_pence",
             )
         else:
             home_pence = st.slider(
-                f"{label} - Tariff Rate (p/kWh)",
+                f"{label} - tariff (p/kWh)",
                 5, 50, max(5, min(50, int(round(preset["energy"] * 100)))), 1,
                 key=f"{key_prefix}_home_pence",
             )
@@ -580,32 +602,32 @@ def render_provider_configuration(
         with col_energy:
             if ios_safe_mode:
                 energy_price = st.number_input(
-                    f"{label} - Energy Price ({currency}/kWh)",
+                    f"{label} - energy ({currency}/kWh)",
                     0.0, 2.0, float(preset["energy"]), 0.01,
                     key=f"{key_prefix}_energy",
                 )
             else:
                 energy_price = st.slider(
-                    f"{label} - Energy Price ({currency}/kWh)",
+                    f"{label} - energy ({currency}/kWh)",
                     0.0, 2.0, float(preset["energy"]), 0.01,
                     key=f"{key_prefix}_energy",
                 )
         with col_time:
             use_per_min = st.checkbox(
-                "Time-based Charging",
+                "Time-based charging",
                 value=bool(preset["time"] > 0),
                 key=f"{key_prefix}_use_per_min",
             )
             if use_per_min:
                 if ios_safe_mode:
                     time_price = st.number_input(
-                        f"Time Price ({currency}/min)",
+                        f"time price ({currency}/min)",
                         0.0, 1.0, float(max(preset["time"], 0.01)), 0.01,
                         key=f"{key_prefix}_time",
                     )
                 else:
                     time_price = st.slider(
-                        f"Time Price ({currency}/min)",
+                        f"time price ({currency}/min)",
                         0.0, 1.0, float(max(preset["time"], 0.01)), 0.01,
                         key=f"{key_prefix}_time",
                     )
@@ -613,13 +635,13 @@ def render_provider_configuration(
                 time_price = 0.0
         if ios_safe_mode:
             session_fee = st.number_input(
-                f"{label} - Connection Fee ({currency})",
+                f"{label} - connection fee ({currency})",
                 0.0, 10.0, 0.0, 0.25,
                 key=f"{key_prefix}_session",
             )
         else:
             session_fee = st.slider(
-                f"{label} - Connection Fee ({currency})",
+                f"{label} - connection fee ({currency})",
                 0.0, 10.0, 0.0, 0.05,
                 key=f"{key_prefix}_session",
             )
@@ -644,7 +666,7 @@ def render_provider_configuration(
     }
 
 # ============================================================================
-# NEARBY CHARGERS (MAP-FIRST, CLICKABLE)
+# NEARBY CHARGERS (MAP-FIRST, MULTI-TARIFF, CLICKABLE)
 # ============================================================================
 
 def render_location_and_cards_section(
@@ -743,13 +765,18 @@ def render_location_and_cards_section(
             icon=folium.Icon(color="green")
         ).add_to(m)
 
-        tariff_name = infer_tariff_from_operator(f"{operator_title or ''} {site_title or ''}")
         best_card = None
         best_cost = None
 
-        if tariff_name and tariff_name in card_set and energy_needed > 0:
-            preset = CHARGING_PROVIDERS.get(tariff_name)
-            if preset:
+        candidate_tariffs = infer_tariffs_for_operator(f"{operator_title or ''} {site_title or ''}")
+        if energy_needed > 0:
+            for tariff_name in candidate_tariffs:
+                if tariff_name not in card_set:
+                    continue
+                preset = CHARGING_PROVIDERS.get(tariff_name)
+                if not preset:
+                    continue
+
                 time_min = calculate_charging_time(
                     battery_kwh, effective_kw, start_pct, end_pct, apply_taper
                 )
@@ -766,8 +793,10 @@ def render_location_and_cards_section(
                     comparison_currency,
                     exchange_rates,
                 )
-                best_card = tariff_name
-                best_cost = total_cost
+
+                if best_cost is None or total_cost < best_cost:
+                    best_cost = total_cost
+                    best_card = tariff_name
 
         rows.append({
             "Charger": title,
@@ -844,7 +873,7 @@ def render_location_and_cards_section(
             )
 
 # ============================================================================
-# ROUTE PLANNER
+# ROUTE PLANNER (MULTI-TARIFF)
 # ============================================================================
 
 def geocode_place_ors(query: str, headers: Dict[str, str]) -> Tuple[float, float]:
@@ -875,11 +904,11 @@ def render_route_planner(
 
     col_r1, col_r2, col_r3 = st.columns([2, 2, 1])
     with col_r1:
-        start_location = st.text_input("Start Location", "Eastbourne, UK")
+        start_location = st.text_input("Start location", "Eastbourne, UK")
     with col_r2:
         end_location = st.text_input("Destination", "Manchester, UK")
     with col_r3:
-        plan_clicked = st.button("Plan Route", use_container_width=True)
+        plan_clicked = st.button("Plan route", use_container_width=True)
 
     if plan_clicked:
         st.session_state["route_planned"] = True
@@ -931,9 +960,9 @@ def render_route_planner(
 
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         col_m1.metric("Distance", f"{distance_miles:.1f} mi")
-        col_m2.metric("Drive Time", format_time(duration_min))
-        col_m3.metric("Charging Stops Needed", required_stops)
-        col_m4.metric("Estimated Charging Cost",
+        col_m2.metric("Drive time", format_time(duration_min))
+        col_m3.metric("Charging stops", required_stops)
+        col_m4.metric("Est. charging cost",
                       format_currency(est_cost, comparison_currency))
 
         stop_fractions: List[float] = []
@@ -983,9 +1012,9 @@ def render_route_planner(
                     "Charger": s["charger_name"],
                     "Operator": s["operator"],
                     "Power (kW)": f"{s['power_kw']:.0f}",
-                    "Best Card": s["card"],
-                    f"Est. Cost ({comparison_currency})": format_currency(s["total_cost"], comparison_currency),
-                    "Charging Time": format_time(s["time_min"]),
+                    "Best card": s["card"],
+                    f"Est. cost ({comparison_currency})": format_currency(s["total_cost"], comparison_currency),
+                    "Charging time": format_time(s["time_min"]),
                 }
                 for i, s in enumerate(stop_suggestions)
             ])
@@ -1047,9 +1076,9 @@ def render_route_planner(
                         "Charger": sel["charger_name"],
                         "Operator": sel["operator"],
                         "Power (kW)": f"{sel['power_kw']:.0f}",
-                        "Best Card": sel["card"],
-                        f"Est. Cost ({comparison_currency})": format_currency(sel["total_cost"], comparison_currency),
-                        "Charging Time": format_time(sel["time_min"]),
+                        "Best card": sel["card"],
+                        f"Est. cost ({comparison_currency})": format_currency(sel["total_cost"], comparison_currency),
+                        "Charging time": format_time(sel["time_min"]),
                     })
             except Exception:
                 pass
@@ -1222,14 +1251,15 @@ def main():
         )
 
     with route_tab:
-        # fallback provider if compare tab hasn’t been used yet
+        fallback_key = list(CHARGING_PROVIDERS.keys())[0]
+        fallback_preset = CHARGING_PROVIDERS[fallback_key]
         fallback_provider = {
-            "provider": list(CHARGING_PROVIDERS.keys())[0],
-            "currency": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["currency"],
-            "station_kw": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["default_kw"],
-            "effective_kw": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["default_kw"],
-            "energy_price": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["energy"],
-            "time_price": CHARGING_PROVIDERS[list(CHARGING_PROVIDERS.keys())[0]]["time"],
+            "provider": fallback_key,
+            "currency": fallback_preset["currency"],
+            "station_kw": fallback_preset["default_kw"],
+            "effective_kw": fallback_preset["default_kw"],
+            "energy_price": fallback_preset["energy"],
+            "time_price": fallback_preset["time"],
             "session_fee": 0.0,
         }
         provider_for_route = st.session_state.get("provider_a_for_route", fallback_provider)
@@ -1258,7 +1288,6 @@ def main():
                     battery_kwh, start_pct, end_pct, efficiency_loss, miles_per_kwh,
                     apply_taper, provider_a, provider_b, comparison_currency, exchange_rates
                 )
-            # store provider_a to reuse in route planner as default tariff
             st.session_state["provider_a_for_route"] = provider_a
 
     st.markdown("---")
