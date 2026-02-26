@@ -1302,8 +1302,29 @@ def render_location_and_cards_section(
 # ROUTE PLANNER MODULE (IONITY STYLE) — FIXED INTO A FUNCTION
 # ============================================================================
 
-import json
-import requests  # make sure this import is at the top of your file
+import requests  # ensure this is imported at the top of the file
+
+
+def geocode_place_ors(query: str, headers: Dict[str, str]) -> Tuple[float, float]:
+    """
+    Geocode a place name using OpenRouteService, constrained to GB.
+    Returns (lon, lat).
+    """
+    url = "https://api.openrouteservice.org/geocode/search"
+    params = {
+        "text": query,
+        "size": 1,
+        "boundary.country": "GB",  # force UK results
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    feats = data.get("features") or []
+    if not feats:
+        raise ValueError(f"No geocode result for '{query}'")
+    coords = feats[0]["geometry"]["coordinates"]  # [lon, lat]
+    return coords[0], coords[1]
+
 
 def render_route_planner(
     battery_kwh: float,
@@ -1336,37 +1357,20 @@ def render_route_planner(
             st.error("Missing OpenRouteService API key. Add ORS_API_KEY to Streamlit secrets.")
             return
 
+        headers = {"Authorization": ORS_API_KEY}
+
         try:
-            # --- 1) Geocode start & end via ORS geocoding API ---
-            headers = {"Authorization": ORS_API_KEY}
+            # 1) Geocode start & end
+            start_lon, start_lat = geocode_place_ors(start_location, headers)
+            end_lon, end_lat = geocode_place_ors(end_location, headers)
 
-def geocode_place(query: str):
-    url = "https://api.openrouteservice.org/geocode/search"
-    params = {
-        "text": query,
-        "size": 1,
-        "boundary.country": "GB",  # force results to Great Britain
-    }
-    r = requests.get(url, headers=headers, params=params, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-    feats = data.get("features") or []
-    if not feats:
-        raise ValueError(f"No geocode result for '{query}'")
-    coords = feats[0]["geometry"]["coordinates"]  # [lon, lat]
-    return coords
-
-            start_geo = geocode_place(start_location)
-            end_geo = geocode_place(end_location)
-
-            # --- 2) Directions via ORS directions API ---
+            # 2) Directions
             url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
-            body = {"coordinates": [start_geo, end_geo]}
+            body = {"coordinates": [[start_lon, start_lat], [end_lon, end_lat]]}
             r_dir = requests.post(url_dir, headers=headers, json=body, timeout=20)
             r_dir.raise_for_status()
             route = r_dir.json()
 
-            # Summary
             summary = route["features"][0]["properties"]["summary"]
             distance_km = summary["distance"] / 1000
             duration_min = summary["duration"] / 60
@@ -1395,8 +1399,7 @@ def geocode_place(query: str):
             col_m4.metric("Estimated Charging Cost",
                           format_currency(est_cost, comparison_currency))
 
-            # --- 3) Map rendering with folium ---
-            start_lat, start_lon = start_geo[1], start_geo[0]
+            # 3) Map rendering
             m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
             folium.GeoJson(route).add_to(m)
@@ -1407,7 +1410,6 @@ def geocode_place(query: str):
                 icon=folium.Icon(color="green")
             ).add_to(m)
 
-            end_lat, end_lon = end_geo[1], end_geo[0]
             folium.Marker(
                 [end_lat, end_lon],
                 tooltip="Destination",
@@ -1424,13 +1426,19 @@ def geocode_place(query: str):
                 pass
 
             if e.response is not None and e.response.status_code == 400 and "2004" in body:
-                st.error("Route is too long for this OpenRouteService plan "
-                         "(> 6,000 km). One of the locations may have been geocoded to the wrong country.")
-                st.caption("Try specifying more precise UK place names (e.g. 'Eastbourne, UK' and 'Manchester, UK').")
+                st.error(
+                    "Route is too long for this OpenRouteService plan (> 6,000 km), "
+                    "or one of the locations was geocoded outside the UK."
+                )
+                st.caption("Try more precise UK names, e.g. 'Eastbourne, UK' and 'Manchester, UK'.")
             else:
                 st.error("Route calculation failed (HTTP error).")
                 st.caption(f"Status: {e.response.status_code if e.response else 'unknown'}, "
                            f"Body: {body[:300]}")
+        except Exception as e:
+            st.error("Route calculation failed. Check locations or API key.")
+            st.caption(str(e))
+            
 # ============================================================================
 # MAIN APPLICATION
 # ============================================================================
