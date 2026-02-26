@@ -360,16 +360,7 @@ def pick_best_charger_stop(
     car_max_kw: float,
     comparison_currency: str,
     exchange_rates: Dict,
-    available_cards: Optional[set] = None,   # note: Optional[set], no extra ]
-) -> Optional[Dict]:
-    user_cards = st.multiselect(
-       
-        "💳 Payment options you have",
-        options=all_cards,
-        default=default_cards,
-        help="We’ll only recommend chargers compatible with these cards."
-        )
-    exchange_rates: Dict,
+    available_cards: Optional[set] = None,
 ) -> Optional[Dict]:
     """
     For a given route point, look up nearby chargers and pick the cheapest
@@ -403,15 +394,15 @@ def pick_best_charger_stop(
             power_kw = 50.0
         effective_kw = min(float(power_kw), float(car_max_kw))
 
-                search_text = f"{operator_title or ''} {site_title or ''}"
+        search_text = f"{operator_title or ''} {site_title or ''}"
         tariff_name = infer_tariff_from_operator(search_text)
         if not tariff_name:
             continue
 
-        # NEW: skip tariffs you don't have
+        # Respect user's available cards
         if available_cards is not None and tariff_name not in available_cards:
             continue
-        
+
         preset = CHARGING_PROVIDERS.get(tariff_name)
         if not preset:
             continue
@@ -1218,10 +1209,12 @@ def render_location_and_cards_section(
     car_max_kw: float,
     comparison_currency: str,
     exchange_rates: Dict,
-    available_cards: list[str],
+    available_cards: list,   # simple list type here
 ):
     st.markdown("---")
     st.markdown("## 🗺️ Chargers Near You & Cheapest Payment Card")
+
+    card_set = set(available_cards or [])
 
     postcode = st.text_input(
         "Enter your UK postcode",
