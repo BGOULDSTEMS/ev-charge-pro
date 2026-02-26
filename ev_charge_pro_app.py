@@ -1201,7 +1201,7 @@ tariff_name = infer_tariff_from_operator(search_text)
 best_card = None
 best_cost = None
 
-        if tariff_name and energy_needed > 0:
+if tariff_name and energy_needed > 0:
             preset = CHARGING_PROVIDERS.get(tariff_name)
             if preset:
                 # Use your existing model
