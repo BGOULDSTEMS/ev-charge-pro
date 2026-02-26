@@ -1365,20 +1365,25 @@ def render_route_planner(
             start_lon, start_lat = geocode_place_ors(start_location, headers)
             end_lon, end_lat = geocode_place_ors(end_location, headers)
 
-            # 2) Directions
+        try:
+            # 1) Geocode start & end
+            start_lon, start_lat = geocode_place_ors(start_location, headers)
+            end_lon, end_lat = geocode_place_ors(end_location, headers)
+
+            # 2) Directions (JSON format with top-level 'routes')
             url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
             body = {"coordinates": [[start_lon, start_lat], [end_lon, end_lat]]}
             r_dir = requests.post(url_dir, headers=headers, json=body, timeout=20)
             r_dir.raise_for_status()
             route = r_dir.json()
 
-            # Defensive: make sure we actually have a route
-            if "features" not in route or not route["features"]:
+            if "routes" not in route or not route["routes"]:
                 st.error("Route service returned an unexpected response.")
-                st.caption(f"Raw response: {json.dumps(route, indent=2)[:600]}")
+                st.caption(f"Raw response: {route}")
                 return
 
-            summary = route["features"][0]["properties"]["summary"]
+            route0 = route["routes"][0]
+            summary = route0["summary"]
             distance_km = summary["distance"] / 1000
             duration_min = summary["duration"] / 60
             distance_miles = distance_km * 0.621371
@@ -1409,7 +1414,13 @@ def render_route_planner(
             # 3) Map rendering
             m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
-            folium.GeoJson(route).add_to(m)
+            # Wrap ORS 'geometry' into a GeoJSON Feature for folium
+            route_feature = {
+                "type": "Feature",
+                "geometry": route0["geometry"],
+                "properties": {},
+            }
+            folium.GeoJson(route_feature).add_to(m)
 
             folium.Marker(
                 [start_lat, start_lon],
@@ -1424,27 +1435,6 @@ def render_route_planner(
             ).add_to(m)
 
             st_folium(m, width=1200, height=600)
-
-        except requests.HTTPError as e:
-            body = ""
-            try:
-                body = e.response.text
-            except Exception:
-                pass
-
-            if e.response is not None and e.response.status_code == 400 and "2004" in body:
-                st.error(
-                    "Route is too long for this OpenRouteService plan (> 6,000 km), "
-                    "or one of the locations was geocoded outside the UK."
-                )
-                st.caption("Try more precise UK names, e.g. 'Eastbourne, UK' and 'Manchester, UK'.")
-            else:
-                st.error("Route calculation failed (HTTP error).")
-                st.caption(f"Status: {e.response.status_code if e.response else 'unknown'}, "
-                           f"Body: {body[:300]}")
-        except Exception as e:
-            st.error("Route calculation failed. Check locations or API key.")
-            st.caption(str(e))
             
 # ============================================================================
 # MAIN APPLICATION
