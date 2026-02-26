@@ -1303,10 +1303,6 @@ def render_location_and_cards_section(
 # ROUTE PLANNER MODULE (IONITY STYLE) — FIXED INTO A FUNCTION
 # ============================================================================
 
-import json
-import requests  # keep this near the top of your file with the other imports
-
-
 def geocode_place_ors(query: str, headers: Dict[str, str]) -> Tuple[float, float]:
     """
     Geocode a place name using OpenRouteService, constrained to GB.
@@ -1339,7 +1335,6 @@ def render_route_planner(
     st.markdown("## 🗺 EV Route Planner")
     st.caption("Plan long journeys • Estimate charging stops • Visual route mapping")
 
-    # keep this outside the container if you like; functional either way
     if "route_planned" not in st.session_state:
         st.session_state["route_planned"] = False
 
@@ -1355,11 +1350,9 @@ def render_route_planner(
         with col_r3:
             plan_clicked = st.button("Plan Route", use_container_width=True)
 
-        # When the button is clicked, remember that we should show the route
         if plan_clicked:
             st.session_state["route_planned"] = True
 
-        # If no route has ever been planned, don't show anything yet
         if not st.session_state["route_planned"]:
             return
 
@@ -1371,9 +1364,114 @@ def render_route_planner(
         headers = {"Authorization": ORS_API_KEY}
 
         try:
-            # ... keep your existing geocode + directions + metrics + map code here ...
-            # (everything from start_lon, start_lat = geocode_place_ors(...) downward)
-            ...
+            # 1) Geocode start & end
+            start_lon, start_lat = geocode_place_ors(start_location, headers)
+            end_lon, end_lat = geocode_place_ors(end_location, headers)
+
+            # 2) Directions (standard ORS JSON with encoded geometry)
+            url_dir = "https://api.openrouteservice.org/v2/directions/driving-car"
+            body = {"coordinates": [[start_lon, start_lat], [end_lon, end_lat]]}
+            r_dir = requests.post(url_dir, headers=headers, json=body, timeout=20)
+            r_dir.raise_for_status()
+            route = r_dir.json()
+
+            if "routes" not in route or not route["routes"]:
+                st.error("Route service returned an unexpected response.")
+                st.caption(f"Raw response: {json.dumps(route, indent=2)[:600]}")
+                return
+
+            route0 = route["routes"][0]
+            summary = route0["summary"]
+            distance_km = summary["distance"] / 1000
+            duration_min = summary["duration"] / 60
+            distance_miles = distance_km * 0.621371
+
+            # 3) Charging metrics
+            usable_battery = battery_kwh * 0.70  # 10–80% window
+            max_range = usable_battery * miles_per_kwh
+            required_stops = max(0, int(distance_miles // max_range))
+
+            total_energy_needed = distance_miles / miles_per_kwh
+
+            energy_price = provider_a["energy_price"]
+            est_cost_native = total_energy_needed * energy_price
+
+            est_cost = convert_currency(
+                est_cost_native,
+                provider_a["currency"],
+                comparison_currency,
+                exchange_rates
+            )
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            col_m1.metric("Distance", f"{distance_miles:.1f} mi")
+            col_m2.metric("Drive Time", format_time(duration_min))
+            col_m3.metric("Charging Stops Needed", required_stops)
+            col_m4.metric("Estimated Charging Cost",
+                          format_currency(est_cost, comparison_currency))
+
+            # 4) Map rendering
+            m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
+
+            geom = route0.get("geometry")
+            try:
+                if isinstance(geom, dict):
+                    route_geom = geom
+                elif isinstance(geom, str):
+                    decoded = convert.decode_polyline(geom)
+                    route_geom = {
+                        "type": "LineString",
+                        "coordinates": decoded["coordinates"],
+                    }
+                else:
+                    route_geom = None
+
+                if route_geom is not None:
+                    route_feature = {
+                        "type": "Feature",
+                        "geometry": route_geom,
+                        "properties": {},
+                    }
+                    folium.GeoJson(route_feature).add_to(m)
+                else:
+                    st.caption("Route geometry was not usable; showing markers only.")
+            except Exception:
+                st.caption("Failed to decode route geometry; showing markers only.")
+
+            folium.Marker(
+                [start_lat, start_lon],
+                tooltip="Start",
+                icon=folium.Icon(color="green")
+            ).add_to(m)
+
+            folium.Marker(
+                [end_lat, end_lon],
+                tooltip="Destination",
+                icon=folium.Icon(color="red")
+            ).add_to(m)
+
+            st_folium(m, width=1200, height=600)
+
+        except requests.HTTPError as e:
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                pass
+
+            if e.response is not None and e.response.status_code == 400 and "2004" in body:
+                st.error(
+                    "Route is too long for this OpenRouteService plan (> 6,000 km), "
+                    "or one of the locations was geocoded outside the UK."
+                )
+                st.caption("Try more precise UK names, e.g. 'Eastbourne, UK' and 'Manchester, UK'.")
+            else:
+                st.error("Route calculation failed (HTTP error).")
+                st.caption(f"Status: {e.response.status_code if e.response else 'unknown'}, "
+                           f"Body: {body[:300]}")
+        except Exception as e:
+            st.error("Route calculation failed. Check locations or API key.")
+            st.caption(str(e))
 
         try:
             # 1) Geocode start & end
