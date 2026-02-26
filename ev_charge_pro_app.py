@@ -348,7 +348,91 @@ def geocode_postcode(postcode: str) -> Optional[Tuple[float, float]]:
     except Exception:
         return None
 
+def pick_best_charger_stop(
+    lon: float,
+    lat: float,
+    battery_kwh: float,
+    miles_per_kwh: float,
+    start_soc: float,
+    end_soc: float,
+    efficiency_loss: float,
+    apply_taper: bool,
+    car_max_kw: float,
+    comparison_currency: str,
+    exchange_rates: Dict,
+) -> Optional[Dict]:
+    """
+    For a given route point, look up nearby chargers and pick the cheapest
+    known-network option using your cost model. Returns a dict with charger + card info
+    or None if nothing useful is found.
+    """
+    pois = fetch_nearby_chargers(lat, lon, distance_km=5, max_results=10)
+    if not pois:
+        return None
 
+    energy_needed = battery_kwh * ((end_soc - start_soc) / 100.0)
+    energy_needed *= (1.0 + efficiency_loss / 100.0)
+    if energy_needed <= 0:
+        return None
+
+    best = None
+
+    for poi in pois:
+        addr = poi.get("AddressInfo", {}) or {}
+        op_info = poi.get("OperatorInfo") or {}
+        operator_title = op_info.get("Title")
+        site_title = addr.get("Title")
+        display_operator = operator_title or site_title or "Unknown"
+
+        lat_c = addr.get("Latitude")
+        lon_c = addr.get("Longitude")
+
+        connections = poi.get("Connections") or []
+        power_kw = connections[0].get("PowerKW") if connections else None
+        if not isinstance(power_kw, (int, float)):
+            power_kw = 50.0
+        effective_kw = min(float(power_kw), float(car_max_kw))
+
+        search_text = f"{operator_title or ''} {site_title or ''}"
+        tariff_name = infer_tariff_from_operator(search_text)
+        if not tariff_name:
+            continue
+
+        preset = CHARGING_PROVIDERS.get(tariff_name)
+        if not preset:
+            continue
+
+        time_min = calculate_charging_time(
+            battery_kwh, effective_kw, start_soc, end_soc, apply_taper
+        )
+        native_cost = calculate_charging_cost(
+            energy_needed,
+            time_min,
+            preset["energy"],
+            preset["time"],
+            0.0,
+        )
+        total_cost = convert_currency(
+            native_cost,
+            preset["currency"],
+            comparison_currency,
+            exchange_rates,
+        )
+
+        if (best is None) or (total_cost < best["total_cost"]):
+            best = {
+                "charger_name": site_title or display_operator,
+                "operator": display_operator,
+                "lat": lat_c,
+                "lon": lon_c,
+                "power_kw": effective_kw,
+                "card": tariff_name,
+                "total_cost": total_cost,
+                "time_min": time_min,
+            }
+
+    return best
+    
 # ============================================================================
 # STYLING
 # ============================================================================
@@ -1409,7 +1493,72 @@ def render_route_planner(
             col_m3.metric("Charging Stops Needed", required_stops)
             col_m4.metric("Estimated Charging Cost",
                           format_currency(est_cost, comparison_currency))
+           
+            # 3a) Decide where to stop: simple heuristic — one stop every max_range
+            usable_battery = battery_kwh * 0.70  # 10–80% window
+            max_range = usable_battery * miles_per_kwh
+            required_stops = max(0, int(distance_miles // max_range))
 
+            # Compute fraction along route for each stop (e.g. 1 stop at 50%, 2 at 33% & 66%)
+            stop_fractions = []
+            if required_stops == 1:
+                stop_fractions = [0.5]
+            elif required_stops >= 2:
+                step = 1.0 / (required_stops + 1)
+                stop_fractions = [step * (i + 1) for i in range(required_stops)]
+
+            # Approximate stop coordinates by interpolating along geometry coordinates
+            stop_suggestions = []
+            geom = route0.get("geometry")
+            coords = []
+
+            if isinstance(geom, dict) and geom.get("coordinates"):
+                coords = geom["coordinates"]
+            elif isinstance(geom, str):
+                decoded = convert.decode_polyline(geom)
+                coords = decoded["coordinates"]
+
+            if coords and stop_fractions:
+                # simple linear index interpolation
+                n = len(coords) - 1
+                for frac in stop_fractions:
+                    idx = int(round(frac * n))
+                    idx = max(0, min(n, idx))
+                    lon_s, lat_s = coords[idx]
+
+                    best = pick_best_charger_stop(
+                        lon_s,
+                        lat_s,
+                        battery_kwh=battery_kwh,
+                        miles_per_kwh=miles_per_kwh,
+                        start_soc=10.0,   # arrive nearly empty
+                        end_soc=80.0,     # charge back to 80%
+                        efficiency_loss=6.0,
+                        apply_taper=True,
+                        car_max_kw=provider_a["station_kw"],
+                        comparison_currency=comparison_currency,
+                        exchange_rates=exchange_rates,
+                    )
+                    if best:
+                        stop_suggestions.append(best)
+                        # 3b) Show suggested stops
+            if stop_suggestions:
+                st.markdown("### Suggested Charging Stops (Cheapest Known Options)")
+
+                df_stops = pd.DataFrame([
+                    {
+                        "Stop #": i + 1,
+                        "Charger": s["charger_name"],
+                        "Operator": s["operator"],
+                        "Power (kW)": f"{s['power_kw']:.0f}",
+                        "Best Card": s["card"],
+                        f"Est. Cost ({comparison_currency})": format_currency(s["total_cost"], comparison_currency),
+                        "Charging Time": format_time(s["time_min"]),
+                    }
+                    for i, s in enumerate(stop_suggestions)
+                ])
+                st.dataframe(df_stops, use_container_width=True, hide_index=True)
+                
             # 4) Map rendering
             m = folium.Map(location=[start_lat, start_lon], zoom_start=6)
 
@@ -1585,6 +1734,18 @@ def render_route_planner(
         except Exception as e:
             st.error("Route calculation failed. Check locations or API key.")
             st.caption(str(e)) 
+
+            # existing route line + start/end markers...
+
+            # Add suggested stop markers
+            for i, s in enumerate(stop_suggestions):
+                folium.Marker(
+                    [s["lat"], s["lon"]],
+                    tooltip=f"Stop {i+1}: {s['charger_name']}",
+                    popup=f"{s['operator']}<br>Best card: {s['card']}<br>"
+                          f"Est. cost: {format_currency(s['total_cost'], comparison_currency)}",
+                    icon=folium.Icon(color="orange", icon="bolt", prefix="fa"),
+                ).add_to(m)
             
 # ============================================================================
 # MAIN APPLICATION
